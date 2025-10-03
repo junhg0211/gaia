@@ -6,7 +6,7 @@
 
 <div class="map-container">
   <div>{map.name}</div>
-  <Layer layer={map.layer} />
+  <Layer layer={map.layer} on:addLayer={addLayer} on:addArea={addArea} />
 </div>
 
 <style>

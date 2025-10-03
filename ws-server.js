@@ -12,7 +12,8 @@ let map;
 if (fs.existsSync('map.json')) {
   map = loadMapFromFile('map.json');
 } else {
-  map = new Map("Gaia", new Layer("root", new Quadtree(null), null, [0, 0], [1, 1], "Root Layer"));
+  map = new Map("Gaia",
+    new Layer("root", new Quadtree(null), null, [0, 0], [1, 1], "Root Layer"));
 }
 
 const clients = new Set();

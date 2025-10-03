@@ -58,7 +58,7 @@ class Layer {
     this.pos = pos;
     this.size = size;
     this.name = name;
-    this.areas = [];
+    this.areas = [new Area(0, 'transparent', this, 'None')];
     this.children = [];
 
     if (this.id === undefined || this.id === null) {
