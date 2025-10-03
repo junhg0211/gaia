@@ -80,6 +80,38 @@ function handleMessage(ws, message) {
     return;
   }
 
+  const LINE_RE = /^LINE:(\d+):([0-9\-]+),([0-9\-]+):([0-9\-]+),([0-9\-]+):(\d+),(\d+)$/;
+  const lineMatch = message.match(LINE_RE);
+  if (lineMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(lineMatch[1]);
+    const x1 = parseInt(lineMatch[2]);
+    const y1 = parseInt(lineMatch[3]);
+    const x2 = parseInt(lineMatch[4]);
+    const y2 = parseInt(lineMatch[5]);
+    const color = parseInt(lineMatch[6]);
+    const brushSize = parseInt(lineMatch[7]);
+
+    const layer = map.layers.find(l => l.id === layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color);
+
+    const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    ws.send('OK');
+
+    return;
+  }
+
   ws.send(`ERR Unknown command: ${message}`);
 }
 

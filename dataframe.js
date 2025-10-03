@@ -171,6 +171,46 @@ class Quadtree {
 
     this.tryMerge();
   }
+
+  drawPolygon(points, value, depth = 11) {
+    if (depth === 0) {
+      const pointInPolygon = (x, y, polygon) => {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i][0], yi = polygon[i][1];
+          const xj = polygon[j][0], yj = polygon[j][1];
+
+          const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+      const contained = pointInPolygon(0.5, 0.5, points);
+      if (contained) this.set(value);
+      return;
+    }
+
+    this.divide();
+
+    const halfPoints = points.map(([px, py]) => [px * 2, py * 2]);
+
+    this.children[0].drawPolygon(halfPoints, value, depth - 1);
+    this.children[1].drawPolygon(halfPoints.map(([px, py]) => [px - 1, py]), value, depth - 1);
+    this.children[2].drawPolygon(halfPoints.map(([px, py]) => [px, py - 1]), value, depth - 1);
+    this.children[3].drawPolygon(halfPoints.map(([px, py]) => [px - 1, py - 1]), value, depth - 1);
+
+    this.tryMerge();
+  }
+
+  drawLine(x1, y1, x2, y2, width, value, depth = 11) {
+    const points = [
+      [x1 + Math.cos(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2, y1 + Math.sin(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2],
+      [x1 + Math.cos(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2, y1 + Math.sin(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2],
+      [x2 + Math.cos(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2, y2 + Math.sin(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2],
+      [x2 + Math.cos(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2, y2 + Math.sin(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2],
+    ];
+    return this.drawPolygon(points, value, depth);
+  }
 }
 
 function serializeQuadtree(node) {
