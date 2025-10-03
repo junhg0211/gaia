@@ -338,6 +338,11 @@
           nowTool.vars.zooming = false
         }
       },
+      vars: {
+        zooming: false,
+        startX: 0, startY: 0,
+        initialZoom: 1,
+      },
       icon: "zoom-in",
       hotkey: "z",
     },
