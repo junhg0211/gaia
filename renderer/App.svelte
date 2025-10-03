@@ -108,6 +108,13 @@
   let initialCameraY = 0;
   function mouseButtonDownHandler(event) {
     if (event.button === 1) { // Middle mouse button
+      // if mouse is in the canvas
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+        return;
+      }
+
       event.preventDefault(); // Prevent default behavior like scrolling
       isPanning = true;
       panStartX = event.clientX;
