@@ -2,19 +2,23 @@
   import { deserializeMap } from "../dataframe.js";
   import { onMount, tick } from 'svelte'
   import "bootstrap-icons/font/bootstrap-icons.css"
+  import Map from './Map.svelte'
 
   let ws
   let connected = false
   let map
 
   let log = []
+  const cursors = {}
+  let username = ""
 
+  let wsAddress = 'localhost:48829'
   function connect() {
-    ws = new WebSocket('ws://localhost:48829')
+    ws = new WebSocket(`ws://${wsAddress}`)
     ws.onopen = () => {
       connected = true
       addLogEntry('connected to websocket')
-      ws.send(`LOGIN:secret:Username`)
+      ws.send(`LOGIN:secret:${username}`)
       ws.send(`LOAD`)
     }
     ws.onmessage = (event) => {
@@ -22,7 +26,12 @@
 
       if (event.data.startsWith('MAP:')) {
         const mapData = event.data.slice(4)
-        map = deserializeMap(mapData)
+        map = deserializeMap(JSON.parse(mapData))
+        updateCanvas()
+      } else if (event.data.startsWith('CURSOR:')) {
+        const [id, coords] = event.data.slice(7).split(':')
+        const [x, y] = coords.split(',').map(Number)
+        cursors[id] = { x, y }
         updateCanvas()
       }
     }
@@ -318,7 +327,11 @@
     {#if connected}
       <div>Connected to WebSocket server</div>
     {:else}
-      <div><button on:click={connect}>Connect to WebSocket</button></div>
+      <div>
+        <input type="text" placeholder="Username" bind:value={username} />
+        <input type="text" placeholder="localhost:48829" bind:value={wsAddress} />
+        <button on:click={connect}>Connect to WebSocket</button>
+      </div>
     {/if}
   </div>
   <div class="content">
@@ -338,7 +351,9 @@
     <div class="properties-window">
       <div class="layers">
         {#if map}
-        {map.renderDOM()}
+        <Map {map} />
+        {:else}
+        <div>No map loaded</div>
         {/if}
       </div>
       <div class="log" bind:this={logContainer}>

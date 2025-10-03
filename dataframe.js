@@ -6,10 +6,6 @@ class Map {
     this.layer = layer;
   }
 
-  renderDOM() {
-    return "hei"
-  }
-
   draw(ctx, x, y, width, height) {
     if (!this.layer || !this.layer.quadtree) return;
 
@@ -55,7 +51,6 @@ function setLayerHighestId(id) {
 }
 
 class Layer {
-
   constructor(id, quadtree, parent, pos, size, name) {
     this.id = id;
     this.quadtree = quadtree;

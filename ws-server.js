@@ -1,10 +1,9 @@
 // index.js
 import { WebSocketServer } from 'ws';
-import { Map } from './dataframe.js';
 import { loadMapFromFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { serializeMap } from './dataframe.js';
+import { Map, Layer, Quadtree, serializeMap } from './dataframe.js';
 
 const PORT = 48829;
 const wss = new WebSocketServer({ port: PORT });
@@ -13,7 +12,7 @@ let map;
 if (fs.existsSync('map.json')) {
   map = loadMapFromFile('map.json');
 } else {
-  map = new Map();
+  map = new Map("Gaia", new Layer("root", new Quadtree(null), null, [0, 0], [1, 1], "Root Layer"));
 }
 
 const clients = new Set();
@@ -76,7 +75,7 @@ function handleMessage(ws, message) {
       ws.send('ERR Not logged in');
       return;
     }
-    ws.send(`MAP:${serializeMap(map)}`);
+    ws.send(`MAP:${JSON.stringify(serializeMap(map))}`);
     return;
   }
 
