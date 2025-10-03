@@ -4,8 +4,11 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
   plugins: [svelte()],
-  root: 'renderer',
+  root: './renderer',
   build: {
-    outDir: 'dist',
+    outDir: './dist',
   },
+  server: {
+    port: 5174
+  }
 });
