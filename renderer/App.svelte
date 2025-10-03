@@ -355,7 +355,7 @@
       hotkey: "z",
     },
     {
-      name: "브러시",
+      name: "선",
       onmousedown: (e) => {
         if (e.button === 0) {
           nowTool.vars.x = e.clientX
@@ -405,8 +405,8 @@
           ctx.stroke()
         }
       },
-      icon: "brush",
-      hotkey: "b",
+      icon: "type-underline",
+      hotkey: "l",
     },
   ]
   let nowTool = tools[0]
