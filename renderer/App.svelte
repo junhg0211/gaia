@@ -228,7 +228,7 @@
     zoom: 1,
     setZoom(zoom) {
       this.zoom = zoom
-      this.zoom = Math.max(0.1, Math.min(this.zoom, 10))
+      this.zoom = Math.max(1/10000, Math.min(this.zoom, 100))
     },
     toScreenX(worldX) {
       return (worldX - this.x) * this.zoom + canvas.width / 2
@@ -256,19 +256,28 @@
     }
 
     // Draw grid
-    const gridSize = 50 * camera.zoom
+    const gridLength = Math.pow(2, Math.floor(Math.log2(100 / camera.zoom)))
+    const gridSize = gridLength * camera.zoom
     ctx.strokeStyle = '#ccc'
     ctx.lineWidth = 1
     ctx.beginPath()
+    ctx.font = '10px Arial'
+    ctx.fillStyle = 'black'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
     const startX = camera.toScreenX(0) % gridSize
     const startY = camera.toScreenY(0) % gridSize
     for (let x = startX; x < canvas.width; x += gridSize) {
       ctx.moveTo(x, 0)
       ctx.lineTo(x, canvas.height)
+      ctx.fillText(Math.round(camera.toWorldX(x)), x + 2, 2)
     }
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
     for (let y = startY; y < canvas.height; y += gridSize) {
       ctx.moveTo(0, y)
       ctx.lineTo(canvas.width, y)
+      ctx.fillText(Math.round(camera.toWorldY(y)), canvas.width - 2, y - 2)
     }
     ctx.stroke()
 
