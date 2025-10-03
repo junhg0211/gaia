@@ -57,8 +57,8 @@
   function resizeCanvas() {
     if (!canvas || !workspace) return
 
-    canvas.width = workspace.clientWidth
-    canvas.height = workspace.clientHeight
+    canvas.width = workspace.clientWidth - 10
+    canvas.height = workspace.clientHeight - 10
     updateCanvas()
   }
 
@@ -223,6 +223,7 @@
   .workspace {
     flex: 1;
     background-color: #ffffff;
+    overflow: hidden;
   }
   .properties-window {
     width: 300px;
