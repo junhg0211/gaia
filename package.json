@@ -8,7 +8,8 @@
     "dev:electron": "(wait-on -t 1s http://127.0.0.1:5174 2> /dev/null || true) && NODE_ENV=development electron .",
     "dev": "concurrently \"npm run dev:ui\" \"npm run dev:electron\"",
     "build:ui": "vite build --config vite.config.js",
-    "build": "npm run build:ui && electron-builder"
+    "build": "npm run build:ui && electron-builder",
+    "test:dataframe": "node dataframe-test.js"
   },
   "dependencies": {
     "ws": "^8.18.3"
