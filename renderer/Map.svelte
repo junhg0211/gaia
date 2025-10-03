@@ -2,6 +2,14 @@
   import Layer from './Layer.svelte';
 
   export let map;
+
+  function addArea(event) {
+    console.log('Map received addArea event:', event.detail);
+  }
+
+  function addLayer(event) {
+    console.log('Map received addLayer event:', event.detail);
+  }
 </script>
 
 <div class="map-container">
