@@ -76,10 +76,11 @@
   }
 
   function handleWheel(event) {
-    if (event.deltaY < 0) {
-      camera.setZoom(camera.zoom * 1.1)
-    } else if (event.deltaY > 0) {
-      camera.setZoom(camera.zoom / 1.1)
+    camera.x += (event.deltaX / camera.zoom)
+    camera.y += (event.deltaY / camera.zoom)
+
+    if (event.altKey) {
+      camera.setZoom(camera.zoom * Math.exp(event.deltaY * 0.001))
     }
 
     nowTool.onwheel(event)
@@ -238,6 +239,35 @@
       onwheel: (e) => {},
       icon: "arrows-move",
       hotkey: "h",
+    },
+    {
+      name: "확대",
+      vars: {},
+      onstart: () => {},
+      onend: () => {},
+      onmousedown: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.startX = e.clientX
+          nowTool.vars.startY = e.clientY
+          nowTool.vars.initialZoom = camera.zoom
+          nowTool.vars.zooming = true
+        }
+      },
+      onmousemove: (e) => {
+        if (nowTool.vars.zooming) {
+          const delta = (e.clientY + e.clientX) - (nowTool.vars.startY + nowTool.vars.startX)
+          camera.setZoom(nowTool.vars.initialZoom * Math.exp(delta * 0.005))
+          updateCanvas()
+        }
+      },
+      onmouseup: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.zooming = false
+        }
+      },
+      onwheel: (e) => {},
+      icon: "zoom-in",
+      hotkey: "z",
     },
   ]
   let nowTool = tools[0]
