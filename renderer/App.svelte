@@ -168,6 +168,7 @@
     body {
       margin: 0;
       font-family: Pretendard, sans-serif;
+      overflow: hidden;
     }
   </style>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
@@ -226,7 +227,6 @@
   .workspace {
     flex: 1;
     background-color: #ffffff;
-    overflow: hidden;
   }
   .properties-window {
     width: 300px;
