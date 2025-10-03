@@ -77,12 +77,42 @@
 
     window.addEventListener('resize', resizeCanvas)
     window.addEventListener('wheel', handleWheel, { passive: true })
-
-    return () => {
-      window.removeEventListener('resize', resizeCanvas)
-      window.removeEventListener('wheel', handleWheel)
-    }
+    window.addEventListener("mousebuttondown", mouseButtonDownHandler);
+    window.addEventListener("mousemove", mouseMoveHandler);
+    window.addEventListener("mouseup", mouseButtonUpHandler);
   })
+
+  function mouseMoveHandler(event) {
+    if (isPanning) {
+      const deltaX = (event.clientX - panStartX) / camera.zoom;
+      const deltaY = (event.clientY - panStartY) / camera.zoom;
+      camera.x = initialCameraX - deltaX;
+      camera.y = initialCameraY - deltaY;
+      updateCanvas();
+    }
+  }
+
+  function mouseButtonUpHandler(event) {
+    if (event.button === 1) { // Middle mouse button
+      isPanning = false;
+    }
+  }
+
+  let isPanning = false;
+  let panStartX = 0;
+  let panStartY = 0;
+  let initialCameraX = 0;
+  let initialCameraY = 0;
+  function mouseButtonDownHandler(event) {
+    if (event.button === 1) { // Middle mouse button
+      event.preventDefault(); // Prevent default behavior like scrolling
+      isPanning = true;
+      panStartX = event.clientX;
+      panStartY = event.clientY;
+      initialCameraX = camera.x;
+      initialCameraY = camera.y;
+    }
+  }
 
   const camera = {
     x: 0,
