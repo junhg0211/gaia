@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Map, Layer, Area, Quadtree, saveMapToFile, loadMapFromFile } from './dataframe.js';
+import { Map, Layer, Area, Quadtree } from './dataframe.js';
+import { saveMapToFile, loadMapFromFile } from './dataframe-fs.js';
 
 const tests = [
   {

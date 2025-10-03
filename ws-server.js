@@ -1,6 +1,7 @@
 // index.js
 import { WebSocketServer } from 'ws';
-import { Map, loadMapFromFile } from './dataframe.js';
+import { Map } from './dataframe.js';
+import { loadMapFromFile } from './dataframe-fs.js';
 import fs from 'fs';
 
 import { serializeMap } from './dataframe.js';
