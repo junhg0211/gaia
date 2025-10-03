@@ -53,8 +53,8 @@
 
     // Get mouse position relative to the workspace
     const rect = canvas.getBoundingClientRect()
-    const x = camera.toWorldX(event.clientX - rect.left)
-    const y = camera.toWorldY(event.clientY - rect.top)
+    const x = parseInt(camera.toWorldX(event.clientX - rect.left))
+    const y = parseInt(camera.toWorldY(event.clientY - rect.top))
     const message = `CURSOR:${x},${y}`
     ws.send(message)
 
@@ -336,7 +336,11 @@
       <canvas bind:this={canvas}></canvas>
     </div>
     <div class="properties-window">
-      <div class="properties-content"></div>
+      <div class="layers">
+        {#if map}
+        {map.renderDOM()}
+        {/if}
+      </div>
       <div class="log" bind:this={logContainer}>
         {#each log as entry}
         <div>{entry}</div>
@@ -382,7 +386,7 @@
     display: flex;
     flex-direction: column;
   }
-  .properties-content {
+  .layers {
     flex: 1;
     border-bottom: 1px solid #ccc;
   }

@@ -6,6 +6,10 @@ class Map {
     this.layer = layer;
   }
 
+  renderDOM() {
+    return "hei"
+  }
+
   draw(ctx, x, y, width, height) {
     if (!this.layer || !this.layer.quadtree) return;
 

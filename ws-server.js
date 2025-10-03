@@ -42,7 +42,7 @@ function handleMessage(ws, message) {
     return;
   }
 
-  const CURSORS_RE = /^CURSOR:(\d+),(\d+)$/;
+  const CURSORS_RE = /^CURSOR:([0-9\-]+),([0-9\-]+)$/;
   const cursorMatch = message.match(CURSORS_RE);
   if (cursorMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
