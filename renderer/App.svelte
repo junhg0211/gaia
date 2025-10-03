@@ -186,11 +186,13 @@
     ctx.strokeStyle = '#ccc'
     ctx.lineWidth = 1
     ctx.beginPath()
-    for (let x = camera.toScreenX(-camera.x % 50); x < canvas.width; x += gridSize) {
+    const startX = camera.toScreenX(0) % gridSize
+    const startY = camera.toScreenY(0) % gridSize
+    for (let x = startX; x < canvas.width; x += gridSize) {
       ctx.moveTo(x, 0)
       ctx.lineTo(x, canvas.height)
     }
-    for (let y = camera.toScreenY(-camera.y % 50); y < canvas.height; y += gridSize) {
+    for (let y = startY; y < canvas.height; y += gridSize) {
       ctx.moveTo(0, y)
       ctx.lineTo(canvas.width, y)
     }
