@@ -1,9 +1,11 @@
 <script>
   import { deserializeMap } from "../dataframe.js";
   import { onMount, tick } from 'svelte'
+  import "bootstrap-icons/font/bootstrap-icons.css"
 
   let ws
   let connected = false
+  let map
 
   let log = []
 
@@ -79,6 +81,9 @@
     } else if (event.deltaY > 0) {
       camera.setZoom(camera.zoom / 1.1)
     }
+
+    nowTool.onwheel(event)
+
     updateCanvas()
   }
 
@@ -101,12 +106,16 @@
       camera.y = initialCameraY - deltaY;
       updateCanvas();
     }
+
+    nowTool.onmousemove(event)
   }
 
   function mouseButtonUpHandler(event) {
     if (event.button === 1) { // Middle mouse button
       isPanning = false;
     }
+
+    nowTool.onmouseup(event)
   }
 
   let isPanning = false;
@@ -130,6 +139,8 @@
       initialCameraX = camera.x;
       initialCameraY = camera.y;
     }
+
+    nowTool.onmousedown(event)
   }
 
   const camera = {
@@ -185,7 +196,76 @@
     ctx.stroke()
   }
 
-  let map
+  const tools = [
+    {
+      name: "선택",
+      onstart: () => {},
+      onend: () => {},
+      onmousedown: (e) => {},
+      onmousemove: (e) => {},
+      onmouseup: (e) => {},
+      onwheel: (e) => {},
+      icon: "cursor",
+      hotkey: "v",
+    },
+    {
+      name: "패닝",
+      onstart: () => {},
+      onend: () => {},
+      onmousedown: (e) => {
+        if (e.button === 0) {
+          isPanning = true;
+          panStartX = e.clientX;
+          panStartY = e.clientY;
+          initialCameraX = camera.x;
+          initialCameraY = camera.y;
+        }
+      },
+      onmousemove: (e) => {
+        if (isPanning) {
+          const deltaX = (e.clientX - panStartX) / camera.zoom;
+          const deltaY = (e.clientY - panStartY) / camera.zoom;
+          camera.x = initialCameraX - deltaX;
+          camera.y = initialCameraY - deltaY;
+          updateCanvas();
+        }
+      },
+      onmouseup: (e) => {
+        if (e.button === 0) {
+          isPanning = false;
+        }
+      },
+      onwheel: (e) => {},
+      icon: "arrows-move",
+      hotkey: "h",
+    },
+  ]
+  let nowTool = tools[0]
+
+  window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+      return
+    }
+    for (const tool of tools) {
+      if (e.key.toLowerCase() === tool.hotkey.toLowerCase()) {
+        selectTool(tool)()
+        e.preventDefault()
+        break
+      }
+    }
+  })
+
+  function selectTool(tool) {
+    return () => {
+      if (nowTool && nowTool.onend) {
+        nowTool.onend()
+      }
+      nowTool = tool
+      if (nowTool && nowTool.onstart) {
+        nowTool.onstart()
+      }
+    }
+  }
 </script>
 
 <svelte:head>
@@ -210,7 +290,16 @@
     {/if}
   </div>
   <div class="content">
-    <div class="toolbar-window"></div>
+    <div class="toolbar-window">
+      {#each tools as tool}
+      <div>
+        <button title={tool.name} disabled={nowTool === tool} on:click={selectTool(tool)}>
+          <i class="bi bi-{tool.icon}"></i>
+          {tool.name} ({tool.hotkey.toUpperCase()})
+        </button>
+      </div>
+      {/each}
+    </div>
     <div class="workspace" on:mousemove={handleMouseMove} bind:this={workspace}>
       <canvas bind:this={canvas}></canvas>
     </div>
