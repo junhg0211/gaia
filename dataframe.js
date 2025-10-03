@@ -6,6 +6,37 @@ class Map {
     this.name = name;
     this.layer = layer;
   }
+
+  draw(ctx, x, y, width, height) {
+    if (!this.layer || !this.layer.quadtree) return;
+
+    const drawNode = (node, x, y, size) => {
+      if (node.isLeaf()) {
+        if (node.value !== null && node.value !== undefined) {
+          ctx.fillStyle = node.value;
+          ctx.fillRect(x, y, size, size);
+        }
+      } else {
+        const halfSize = size / 2;
+        drawNode(node.getChild(0), x, y, halfSize); // Top-left
+        drawNode(node.getChild(1), x + halfSize, y, halfSize); // Top-right
+        drawNode(node.getChild(2), x, y + halfSize, halfSize); // Bottom-left
+        drawNode(node.getChild(3), x + halfSize, y + halfSize, halfSize); // Bottom-right
+      }
+    };
+
+    const layer = this.layer;
+    const quadtree = layer.quadtree;
+    const layerSize = Math.max(layer.size[0], layer.size[1]);
+    const scaleX = width / layerSize;
+    const scaleY = height / layerSize;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scaleX, scaleY);
+    drawNode(quadtree, 0, 0, layerSize);
+    ctx.restore();
+  }
 }
 
 let layerHighestId = 0;
@@ -235,4 +266,13 @@ async function loadMapFromFile(filename) {
   return deserializeMap(data);
 }
 
-export { Map, Layer, Area, Quadtree, saveMapToFile, loadMapFromFile };
+export {
+  Map,
+  Layer,
+  Area,
+  Quadtree,
+  saveMapToFile,
+  loadMapFromFile,
+  serializeMap,
+  deserializeMap
+};

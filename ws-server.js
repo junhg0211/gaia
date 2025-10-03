@@ -3,6 +3,8 @@ import { WebSocketServer } from 'ws';
 import { Map, loadMapFromFile } from './dataframe.js';
 import fs from 'fs';
 
+import { serializeMap } from './dataframe.js';
+
 const PORT = 48829;
 const wss = new WebSocketServer({ port: PORT });
 
@@ -64,6 +66,16 @@ function handleMessage(ws, message) {
     }
     // Here you would implement actual saving logic
     ws.send('OK Map saved');
+    return;
+  }
+
+  const LOAD_RE = /^LOAD$/;
+  if (message.match(LOAD_RE)) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    ws.send(`MAP:${serializeMap(map)}`);
     return;
   }
 

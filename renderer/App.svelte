@@ -1,4 +1,5 @@
 <script>
+  import { deserializeMap } from "../dataframe.js";
   import { onMount, tick } from 'svelte'
 
   let ws
@@ -12,9 +13,16 @@
       connected = true
       addLogEntry('connected to websocket')
       ws.send(`LOGIN:secret:Username`)
+      ws.send(`LOAD`)
     }
     ws.onmessage = (event) => {
       addLogEntry(event.data)
+
+      if (event.data.startsWith('MAP:')) {
+        const mapData = event.data.slice(4)
+        map = deserializeMap(mapData)
+        updateCanvas()
+      }
     }
     ws.onclose = () => {
       connected = false
@@ -152,6 +160,15 @@
     ctx.fillStyle = '#f0f0f0'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
+    // draw map
+    if (map) {
+      const mapScreenX = camera.toScreenX(0)
+      const mapScreenY = camera.toScreenY(0)
+      const mapWidth = map.width * camera.zoom
+      const mapHeight = map.height * camera.zoom
+      map.draw(ctx, mapScreenX, mapScreenY, mapWidth, mapHeight)
+    }
+
     // Draw grid
     const gridSize = 50 * camera.zoom
     ctx.strokeStyle = '#ccc'
@@ -167,6 +184,8 @@
     }
     ctx.stroke()
   }
+
+  let map
 </script>
 
 <svelte:head>
