@@ -105,6 +105,7 @@
     window.addEventListener('mousedown', mouseButtonDownHandler)
     window.addEventListener("mousemove", mouseMoveHandler);
     window.addEventListener("mouseup", mouseButtonUpHandler);
+    window.addEventListener("mousemove", handleMouseMove);
   })
 
   function mouseMoveHandler(event) {
@@ -357,7 +358,7 @@
       </div>
       {/each}
     </div>
-    <div class="workspace" on:mousemove={handleMouseMove} bind:this={workspace}>
+    <div class="workspace" bind:this={workspace}>
       <canvas bind:this={canvas}></canvas>
     </div>
     <div class="properties-window">

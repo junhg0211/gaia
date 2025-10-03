@@ -6,7 +6,7 @@ import fs from 'fs';
 import { Map, Layer, Quadtree, serializeMap } from './dataframe.js';
 
 const PORT = 48829;
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
 
 let map;
 if (fs.existsSync('map.json')) {
