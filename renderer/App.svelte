@@ -57,9 +57,11 @@
   async function resizeCanvas() {
     if (!canvas || !workspace) return
 
+    canvas.width = 0;
+    canvas.height = 0;
     await tick();
-    canvas.width = workspace.clientWidth - 10
-    canvas.height = workspace.clientHeight - 10
+    canvas.width = workspace.clientWidth
+    canvas.height = workspace.clientHeight
     updateCanvas()
   }
 
