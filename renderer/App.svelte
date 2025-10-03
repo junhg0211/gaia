@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
 
   let ws
   let connected = false
@@ -54,9 +54,10 @@
 
   let canvas
   let ctx
-  function resizeCanvas() {
+  async function resizeCanvas() {
     if (!canvas || !workspace) return
 
+    await tick();
     canvas.width = workspace.clientWidth - 10
     canvas.height = workspace.clientHeight - 10
     updateCanvas()
