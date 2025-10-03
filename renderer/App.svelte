@@ -1,8 +1,8 @@
 <script>
-  import { deserializeMap } from "../dataframe.js";
   import { onMount, tick } from 'svelte'
   import "bootstrap-icons/font/bootstrap-icons.css"
   import Map from './Map.svelte'
+  import { Quadtree, Area as AreaType, Layer as LayerType, deserializeMap } from "../dataframe.js";
 
   let ws
   let connected = false
@@ -11,6 +11,8 @@
   let log = []
   const cursors = {}
   let username = "User"
+
+  let mapUpdate = 0
 
   let wsAddress = 'localhost:48829'
   function connect() {
@@ -32,6 +34,24 @@
         const [id, x, y] = event.data.slice(7).split(',')
         cursors[id] = { x, y }
         updateCanvas()
+      } else if (event.data.startsWith('NEWA:')) {
+        const mapData = event.data.slice(5)
+        const [ layerId, areaId, name, color ] = mapData.split(':')
+        const layer = map.findLayer(parseInt(layerId))
+        if (layer) {
+          layer.areas.push(new AreaType(parseInt(areaId), color, layer, name))
+          mapUpdate = (mapUpdate + 1) % 1000000
+          console.log(layer)
+        }
+      } else if (event.data.startsWith('NEWL:')) {
+        const mapData = event.data.slice(5)
+        const [ parentId, layerId, name ] = mapData.split(':')
+        const parent = map.findLayer(parseInt(parentId))
+        if (parent) {
+          parent.children.push(new LayerType(parseInt(layerId), new Quadtree(0), parent, [0,0], [1,1], name))
+          mapUpdate = (mapUpdate + 1) % 1000000
+          console.log(parent)
+        }
       }
     }
     ws.onclose = () => {
@@ -50,25 +70,12 @@
 
     // Scroll to the bottom of the log container
     if (logContainer) {
-      logContainer.scrollTo(0, logContainer.scrollHeight)
+      logContainer.scrollTo(0, logContainer.scrollHeight + 100)
     }
   }
 
   let mouseX, mouseY
   let workspace
-  function handleMouseMove(event) {
-    if (!connected || !canvas) return
-
-    // Get mouse position relative to the workspace
-    const rect = canvas.getBoundingClientRect()
-    const x = parseInt(camera.toWorldX(event.clientX - rect.left))
-    const y = parseInt(camera.toWorldY(event.clientY - rect.top))
-    const message = `CURSOR:${x},${y}`
-    ws.send(message)
-
-    mouseX = x
-    mouseY = y
-  }
 
   let canvas
   let ctx
@@ -84,6 +91,11 @@
   }
 
   function handleWheel(event) {
+    const rect = canvas.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      return;
+    }
+
     camera.x += (event.deltaX / camera.zoom)
     camera.y += (event.deltaY / camera.zoom)
 
@@ -91,7 +103,8 @@
       camera.setZoom(camera.zoom * Math.exp(event.deltaY * 0.001))
     }
 
-    nowTool.onwheel(event)
+    if (nowTool.onwheel)
+      nowTool.onwheel(event)
 
     updateCanvas()
   }
@@ -105,10 +118,15 @@
     window.addEventListener('mousedown', mouseButtonDownHandler)
     window.addEventListener("mousemove", mouseMoveHandler);
     window.addEventListener("mouseup", mouseButtonUpHandler);
-    window.addEventListener("mousemove", handleMouseMove);
   })
 
   function mouseMoveHandler(event) {
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      return;
+    }
+
     if (isPanning) {
       const deltaX = (event.clientX - panStartX) / camera.zoom;
       const deltaY = (event.clientY - panStartY) / camera.zoom;
@@ -117,15 +135,35 @@
       updateCanvas();
     }
 
-    nowTool.onmousemove(event)
+    // Get mouse position relative to the workspace
+    const x = parseInt(camera.toWorldX(event.clientX - rect.left))
+    const y = parseInt(camera.toWorldY(event.clientY - rect.top))
+
+    if (ws && connected) {
+      const message = `CURSOR:${x},${y}`
+      ws.send(message)
+    }
+
+    mouseX = x
+    mouseY = y
+
+    if (nowTool.onmousemove)
+      nowTool.onmousemove(event)
   }
 
   function mouseButtonUpHandler(event) {
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      return;
+    }
+
     if (event.button === 1) { // Middle mouse button
       isPanning = false;
     }
 
-    nowTool.onmouseup(event)
+    if (nowTool.onmouseup)
+      nowTool.onmouseup(event)
   }
 
   let isPanning = false;
@@ -134,6 +172,12 @@
   let initialCameraX = 0;
   let initialCameraY = 0;
   function mouseButtonDownHandler(event) {
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      return;
+    }
+
     if (event.button === 1) { // Middle mouse button
       // if mouse is in the canvas
       if (!canvas) return;
@@ -150,7 +194,8 @@
       initialCameraY = camera.y;
     }
 
-    nowTool.onmousedown(event)
+    if (nowTool.onmousedown)
+      nowTool.onmousedown(event)
   }
 
   const camera = {
@@ -207,6 +252,10 @@
     }
     ctx.stroke()
 
+    if (nowTool.render) {
+      nowTool.render(ctx)
+    }
+
     // draw cursors
     for (const id in cursors) {
       const cursor = cursors[id]
@@ -224,19 +273,11 @@
   const tools = [
     {
       name: "선택",
-      onstart: () => {},
-      onend: () => {},
-      onmousedown: (e) => {},
-      onmousemove: (e) => {},
-      onmouseup: (e) => {},
-      onwheel: (e) => {},
       icon: "cursor",
       hotkey: "v",
     },
     {
       name: "패닝",
-      onstart: () => {},
-      onend: () => {},
       onmousedown: (e) => {
         if (e.button === 0) {
           isPanning = true;
@@ -260,15 +301,11 @@
           isPanning = false;
         }
       },
-      onwheel: (e) => {},
       icon: "arrows-move",
       hotkey: "h",
     },
     {
       name: "확대",
-      vars: {},
-      onstart: () => {},
-      onend: () => {},
       onmousedown: (e) => {
         if (e.button === 0) {
           nowTool.vars.startX = e.clientX
@@ -289,9 +326,62 @@
           nowTool.vars.zooming = false
         }
       },
-      onwheel: (e) => {},
       icon: "zoom-in",
       hotkey: "z",
+    },
+    {
+      name: "브러시",
+      onmousedown: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.x = e.clientX
+          nowTool.vars.y = e.clientY
+          nowTool.vars.brushing = true
+        }
+      },
+      onmousemove: (e) => {
+        if (e.button !== 0) return
+        if (!nowTool.vars.brushing) return;
+
+        nowTool.vars.toX = e.clientX
+        nowTool.vars.toY = e.clientY
+
+        updateCanvas()
+      },
+      onmouseup: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.brushing = false
+
+          if (!map) return
+
+          const startX = parseInt(camera.toWorldX(nowTool.vars.x - canvas.getBoundingClientRect().left))
+          const startY = parseInt(camera.toWorldY(nowTool.vars.y - canvas.getBoundingClientRect().top))
+          const endX = parseInt(camera.toWorldX(nowTool.vars.toX - canvas.getBoundingClientRect().left))
+          const endY = parseInt(camera.toWorldY(nowTool.vars.toY - canvas.getBoundingClientRect().top))
+          ws.send(`LINE:${selectedArea.parent.id}:${startX},${startY}:${endX},${endY}:${selectedArea.id},${nowTool.vars.width}`)
+          updateCanvas()
+        }
+      },
+      onwheel: (e) => {},
+      vars: {
+        brushing: false,
+        width: 10,
+        x: 0, y: 0,
+        toX: 0, toY: 0,
+      },
+      render: (ctx) => {
+        if (nowTool.vars.brushing) {
+          const rect = canvas.getBoundingClientRect()
+
+          ctx.strokeStyle = 'blue'
+          ctx.lineWidth = nowTool.vars.width * camera.zoom
+          ctx.beginPath()
+          ctx.moveTo(nowTool.vars.x - rect.left, nowTool.vars.y - rect.top)
+          ctx.lineTo(nowTool.vars.toX - rect.left, nowTool.vars.toY - rect.top)
+          ctx.stroke()
+        }
+      },
+      icon: "brush",
+      hotkey: "b",
     },
   ]
   let nowTool = tools[0]
@@ -319,6 +409,12 @@
         nowTool.onstart()
       }
     }
+  }
+
+  let selectedArea
+  function handleAreaSelect(event) {
+    const { area } = event.detail
+    selectedArea = area
   }
 </script>
 
@@ -364,7 +460,9 @@
     <div class="properties-window">
       <div class="layers">
         {#if map}
-        <Map {map} />
+        {#key mapUpdate}
+        <Map {map} {ws} on:areaselect={handleAreaSelect} />
+        {/key}
         {:else}
         <div>No map loaded</div>
         {/if}

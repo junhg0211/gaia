@@ -2,19 +2,12 @@
   import Layer from './Layer.svelte';
 
   export let map;
-
-  function addArea(event) {
-    console.log('Map received addArea event:', event.detail);
-  }
-
-  function addLayer(event) {
-    console.log('Map received addLayer event:', event.detail);
-  }
+  export let ws;
 </script>
 
 <div class="map-container">
   <div>{map.name}</div>
-  <Layer layer={map.layer} on:addLayer={addLayer} on:addArea={addArea} />
+  <Layer {ws} layer={map.layer} on:areaselect />
 </div>
 
 <style>
