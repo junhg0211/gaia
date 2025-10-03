@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { loadMapFromFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { Map, Layer, Quadtree, serializeMap } from './dataframe.js';
+import { Map, Layer, Area, Quadtree, serializeMap } from './dataframe.js';
 
 const PORT = 48829;
 const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
@@ -12,8 +12,7 @@ let map;
 if (fs.existsSync('map.json')) {
   map = loadMapFromFile('map.json');
 } else {
-  map = new Map("Gaia",
-    new Layer("root", new Quadtree(null), null, [0, 0], [1, 1], "Root Layer"));
+  map = new Map("Gaia", new Layer(null, new Quadtree(0), null, [0, 0], [1, 1], "Root Layer"));
 }
 
 const clients = new Set();
@@ -95,13 +94,17 @@ function handleMessage(ws, message) {
     const color = parseInt(lineMatch[6]);
     const brushSize = parseInt(lineMatch[7]);
 
-    const layer = map.layers.find(l => l.id === layerId);
+    const layer = map.findLayer(layerId);
     if (!layer) {
       ws.send('ERR Invalid layer ID');
       return;
     }
 
-    layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color);
+    const [px, py] = layer.pos ?? [0, 0];
+    const [sx, sy] = layer.size ?? [1, 1];
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
+
+    layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, undefined, bounds);
 
     const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}`;
     for (const [clientWs] of clients) {
@@ -109,6 +112,61 @@ function handleMessage(ws, message) {
     }
     ws.send('OK');
 
+    return;
+  }
+
+  const NEWAREA_RE = /^NEWA:(\d+):(.+):#([0-9a-fA-F]{6})$/;
+  const newAreaMatch = message.match(NEWAREA_RE);
+  if (newAreaMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(newAreaMatch[1]);
+    const areaName = newAreaMatch[2].trim();
+    const color = newAreaMatch[3];
+
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    const newArea = new Area(null, `#${color}`, layerId, areaName);
+    layer.areas.push(newArea);
+    ws.send(`OK`);
+
+    const broadcastMessage = `NEWA:${layerId}:${newArea.id}:${areaName}:#${color}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const NEWLAYER_RE = /^NEWL:(\d+):(.+)$/;
+  const newLayerMatch = message.match(NEWLAYER_RE);
+  if (newLayerMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const parentLayerId = parseInt(newLayerMatch[1]);
+    const layerName = newLayerMatch[2].trim();
+
+    const parentLayer = map.findLayer(parentLayerId);
+    if (!parentLayer) {
+      ws.send('ERR Invalid parent layer ID');
+      return;
+    }
+
+    const newLayer = new Layer(null, new Quadtree(null), parentLayer, [0, 0], [1, 1], layerName);
+    parentLayer.children.push(newLayer);
+    ws.send(`OK`);
+
+    const broadcastMessage = `NEWL:${parentLayerId}:${newLayer.id}:${layerName}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
     return;
   }
 

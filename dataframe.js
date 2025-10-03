@@ -1,40 +1,212 @@
 import path from 'node:path';
 
+const EPSILON = 1e-9;
+
+function pointOnSegment(px, py, ax, ay, bx, by) {
+  const cross = (px - ax) * (by - ay) - (py - ay) * (bx - ax);
+  if (Math.abs(cross) > EPSILON) return false;
+
+  const minX = Math.min(ax, bx) - EPSILON;
+  const maxX = Math.max(ax, bx) + EPSILON;
+  const minY = Math.min(ay, by) - EPSILON;
+  const maxY = Math.max(ay, by) + EPSILON;
+
+  return px >= minX && px <= maxX && py >= minY && py <= maxY;
+}
+
+function pointInPolygon(x, y, polygon) {
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+
+    if (pointOnSegment(x, y, xi, yi, xj, yj)) return true;
+
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || EPSILON) + xi);
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+function polygonBounds(points) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const [x, y] of points) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+
+  return { minX, minY, maxX, maxY };
+}
+
+function rectsOverlap(a, b) {
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
+}
+
+function pointInRect(x, y, rect) {
+  return x >= rect.minX - EPSILON && x <= rect.maxX + EPSILON && y >= rect.minY - EPSILON && y <= rect.maxY + EPSILON;
+}
+
+function orientation(ax, ay, bx, by, cx, cy) {
+  const value = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  if (Math.abs(value) < EPSILON) return 0;
+  return value > 0 ? 1 : -1;
+}
+
+function segmentsIntersect(a, b, c, d) {
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const [cx, cy] = c;
+  const [dx, dy] = d;
+
+  const o1 = orientation(ax, ay, bx, by, cx, cy);
+  const o2 = orientation(ax, ay, bx, by, dx, dy);
+  const o3 = orientation(cx, cy, dx, dy, ax, ay);
+  const o4 = orientation(cx, cy, dx, dy, bx, by);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+
+  if (o1 === 0 && pointOnSegment(cx, cy, ax, ay, bx, by)) return true;
+  if (o2 === 0 && pointOnSegment(dx, dy, ax, ay, bx, by)) return true;
+  if (o3 === 0 && pointOnSegment(ax, ay, cx, cy, dx, dy)) return true;
+  if (o4 === 0 && pointOnSegment(bx, by, cx, cy, dx, dy)) return true;
+
+  return false;
+}
+
+function segmentIntersectsRect(a, b, rect) {
+  if (pointInRect(a[0], a[1], rect) || pointInRect(b[0], b[1], rect)) return true;
+
+  const corners = [
+    [rect.minX, rect.minY],
+    [rect.maxX, rect.minY],
+    [rect.maxX, rect.maxY],
+    [rect.minX, rect.maxY],
+  ];
+
+  const edges = [
+    [corners[0], corners[1]],
+    [corners[1], corners[2]],
+    [corners[2], corners[3]],
+    [corners[3], corners[0]],
+  ];
+
+  for (const [start, end] of edges) {
+    if (segmentsIntersect(a, b, start, end)) return true;
+  }
+
+  return false;
+}
+
+function polygonIntersectsRect(points, rect, cachedBounds) {
+  const bounds = cachedBounds ?? polygonBounds(points);
+  if (!rectsOverlap(rect, bounds)) return false;
+
+  const corners = [
+    [rect.minX, rect.minY],
+    [rect.maxX, rect.minY],
+    [rect.maxX, rect.maxY],
+    [rect.minX, rect.maxY],
+  ];
+
+  for (const point of points) {
+    if (pointInRect(point[0], point[1], rect)) return true;
+  }
+
+  for (const corner of corners) {
+    if (pointInPolygon(corner[0], corner[1], points)) return true;
+  }
+
+  const centerX = (rect.minX + rect.maxX) / 2;
+  const centerY = (rect.minY + rect.maxY) / 2;
+  if (pointInPolygon(centerX, centerY, points)) return true;
+
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i];
+    const end = points[(i + 1) % points.length];
+    if (segmentIntersectsRect(start, end, rect)) return true;
+  }
+
+  return false;
+}
+
+function polygonContainsRect(points, rect) {
+  const corners = [
+    [rect.minX, rect.minY],
+    [rect.maxX, rect.minY],
+    [rect.maxX, rect.maxY],
+    [rect.minX, rect.maxY],
+  ];
+
+  return corners.every(corner => pointInPolygon(corner[0], corner[1], points));
+}
+
 class Map {
   constructor(name, layer) {
     this.name = name;
     this.layer = layer;
   }
 
-  draw(ctx, x, y, width, height) {
-    if (!this.layer || !this.layer.quadtree) return;
-
-    const drawNode = (node, x, y, size) => {
-      if (node.isLeaf()) {
-        if (node.value !== null && node.value !== undefined) {
-          ctx.fillStyle = node.value;
-          ctx.fillRect(x, y, size, size);
-        }
-      } else {
-        const halfSize = size / 2;
-        drawNode(node.getChild(0), x, y, halfSize); // Top-left
-        drawNode(node.getChild(1), x + halfSize, y, halfSize); // Top-right
-        drawNode(node.getChild(2), x, y + halfSize, halfSize); // Bottom-left
-        drawNode(node.getChild(3), x + halfSize, y + halfSize, halfSize); // Bottom-right
+  findLayer(id) {
+    const searchLayer = (layer, id) => {
+      if (layer.id === id) return layer;
+      for (const child of layer.children) {
+        const found = searchLayer(child, id);
+        if (found) return found;
       }
+      return null;
     };
+    return searchLayer(this.layer, id);
+  }
 
-    const layer = this.layer;
-    const quadtree = layer.quadtree;
-    const layerSize = Math.max(layer.size[0], layer.size[1]);
-    const scaleX = width / layerSize;
-    const scaleY = height / layerSize;
+  draw(ctx, canvas, camera, depth = 11) {
+    const drawLayer = layer => {
+      const [px, py] = layer.pos;
+      const [sx, sy] = layer.size;
 
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(scaleX, scaleY);
-    drawNode(quadtree, 0, 0, layerSize);
-    ctx.restore();
+      const x = camera.toScreenX(px);
+      const y = camera.toScreenY(py);
+      const w = sx * camera.zoom;
+      const h = sy * camera.zoom;
+
+      const drawNode = (node, x, y, w, h, depth) => {
+        if (!node) return;
+
+        if (node.isLeaf()) {
+          if (node.value !== 0) {
+            const area = layer.areas.find(a => a.id === node.value);
+            if (area.color === 'transparent') return;
+
+            ctx.fillStyle = area.color;
+            ctx.fillRect(x, y, w, h);
+          }
+          return;
+        }
+
+        const hw = w / 2;
+        const hh = h / 2;
+
+        drawNode(node.getChild(0), x, y, hw, hh, depth - 1);
+        drawNode(node.getChild(1), x + hw, y, hw, hh, depth - 1);
+        drawNode(node.getChild(2), x, y + hh, hw, hh, depth - 1);
+        drawNode(node.getChild(3), x + hw, y + hh, hw, hh, depth - 1);
+      };
+
+      drawNode(layer.quadtree, x, y, w, h, depth);
+
+      for (const child of layer.children) {
+        drawLayer(child);
+      }
+    }
+
+    drawLayer(this.layer);
   }
 }
 
@@ -70,6 +242,37 @@ class Layer {
 
   static getNextId() {
     return ++layerHighestId;
+  }
+
+  expandTo(x, y) {
+    const [px, py] = this.pos;
+    const [sx, sy] = this.size;
+
+    if (px <= x && x <= px + sx && py <= y && y <= py + sy) {
+      this.quadtree.tryMerge();
+      return;
+    }
+
+    this.size = [sx * 2, sy * 2];
+    if (x < px + sx / 2) {
+      if (y < py + sy / 2) {
+        this.quadtree.expandBeing(3);
+        this.pos = [px - sx, py - sy];
+      } else {
+        this.quadtree.expandBeing(1);
+        this.pos = [px - sx, py];
+      }
+    } else {
+      if (y < py + sy / 2) {
+        this.quadtree.expandBeing(2);
+        this.pos = [px, py - sy];
+      } else {
+        this.quadtree.expandBeing(0);
+        this.pos = [px, py];
+      }
+    }
+
+    this.expandTo(x, y);
   }
 }
 
@@ -172,44 +375,92 @@ class Quadtree {
     this.tryMerge();
   }
 
-  drawPolygon(points, value, depth = 11) {
-    if (depth === 0) {
-      const pointInPolygon = (x, y, polygon) => {
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-          const xi = polygon[i][0], yi = polygon[i][1];
-          const xj = polygon[j][0], yj = polygon[j][1];
+  drawPolygon(points, value, depth = 11, bounds, polygonBoundsCache) {
+    const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    const polyBounds = polygonBoundsCache ?? polygonBounds(points);
 
-          const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-          if (intersect) inside = !inside;
-        }
-        return inside;
-      }
-      const contained = pointInPolygon(0.5, 0.5, points);
-      if (contained) this.set(value);
+    if (!rectsOverlap(nodeBounds, polyBounds)) return;
+
+    if (polygonContainsRect(points, nodeBounds)) {
+      this.set(value);
       return;
     }
 
-    this.divide();
+    if (depth === 0) {
+      if (polygonIntersectsRect(points, nodeBounds, polyBounds)) {
+        this.set(value);
+      }
+      return;
+    }
 
-    const halfPoints = points.map(([px, py]) => [px * 2, py * 2]);
+    const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
+    const midY = (nodeBounds.minY + nodeBounds.maxY) / 2;
 
-    this.children[0].drawPolygon(halfPoints, value, depth - 1);
-    this.children[1].drawPolygon(halfPoints.map(([px, py]) => [px - 1, py]), value, depth - 1);
-    this.children[2].drawPolygon(halfPoints.map(([px, py]) => [px, py - 1]), value, depth - 1);
-    this.children[3].drawPolygon(halfPoints.map(([px, py]) => [px - 1, py - 1]), value, depth - 1);
+    const childBounds = [
+      { minX: nodeBounds.minX, minY: nodeBounds.minY, maxX: midX, maxY: midY },
+      { minX: midX, minY: nodeBounds.minY, maxX: nodeBounds.maxX, maxY: midY },
+      { minX: nodeBounds.minX, minY: midY, maxX: midX, maxY: nodeBounds.maxY },
+      { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY },
+    ];
 
-    this.tryMerge();
+    let subdivided = false;
+
+    for (let i = 0; i < 4; i++) {
+      const childBound = childBounds[i];
+      if (!rectsOverlap(childBound, polyBounds)) continue;
+      if (!polygonIntersectsRect(points, childBound, polyBounds)) continue;
+
+      if (!subdivided) {
+        this.divide();
+        subdivided = true;
+      }
+
+      this.children[i].drawPolygon(points, value, depth - 1, childBound, polyBounds);
+    }
+
+    if (subdivided) {
+      this.tryMerge();
+    }
   }
 
-  drawLine(x1, y1, x2, y2, width, value, depth = 11) {
-    const points = [
-      [x1 + Math.cos(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2, y1 + Math.sin(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2],
-      [x1 + Math.cos(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2, y1 + Math.sin(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2],
-      [x2 + Math.cos(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2, y2 + Math.sin(Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2) * width / 2],
-      [x2 + Math.cos(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2, y2 + Math.sin(Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2) * width / 2],
-    ];
-    return this.drawPolygon(points, value, depth);
+  drawLine(x1, y1, x2, y2, width, value, depth = 11, bounds) {
+    const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+
+    const half = width / 2;
+
+    let points;
+    if (length < EPSILON) {
+      points = [
+        [x1 - half, y1 - half],
+        [x1 - half, y1 + half],
+        [x1 + half, y1 + half],
+        [x1 + half, y1 - half],
+      ];
+    } else {
+      const nx = -dy / length;
+      const ny = dx / length;
+      points = [
+        [x1 + nx * half, y1 + ny * half],
+        [x1 - nx * half, y1 - ny * half],
+        [x2 - nx * half, y2 - ny * half],
+        [x2 + nx * half, y2 + ny * half],
+      ];
+    }
+
+    return this.drawPolygon(points, value, depth, nodeBounds);
+  }
+
+  expandBeing(index) {
+    this.divide();
+    this.children[index] = new Quadtree(this.value, this);
+    for (let i = 0; i < 4; i++) {
+      if (i !== index) {
+        this.children[i] = new Quadtree(0, this);
+      }
+    }
   }
 }
 

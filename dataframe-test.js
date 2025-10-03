@@ -5,6 +5,39 @@ import path from 'node:path';
 import { Map, Layer, Area, Quadtree } from './dataframe.js';
 import { saveMapToFile, loadMapFromFile } from './dataframe-fs.js';
 
+function sampleQuadtreeValue(tree, x, y, bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 }) {
+  if (tree.isLeaf() || !tree.children) return tree.value;
+
+  const midX = (bounds.minX + bounds.maxX) / 2;
+  const midY = (bounds.minY + bounds.maxY) / 2;
+
+  let index;
+  let childBounds;
+
+  if (x < midX) {
+    if (y < midY) {
+      index = 0;
+      childBounds = { minX: bounds.minX, minY: bounds.minY, maxX: midX, maxY: midY };
+    } else {
+      index = 2;
+      childBounds = { minX: bounds.minX, minY: midY, maxX: midX, maxY: bounds.maxY };
+    }
+  } else {
+    if (y < midY) {
+      index = 1;
+      childBounds = { minX: midX, minY: bounds.minY, maxX: bounds.maxX, maxY: midY };
+    } else {
+      index = 3;
+      childBounds = { minX: midX, minY: midY, maxX: bounds.maxX, maxY: bounds.maxY };
+    }
+  }
+
+  const child = tree.getChild(index);
+  if (!child) return tree.value;
+
+  return sampleQuadtreeValue(child, x, y, childBounds);
+}
+
 const tests = [
   {
     name: 'Layer auto assigns ids when missing',
@@ -83,6 +116,21 @@ const tests = [
     },
   },
   {
+    name: 'Quadtree drawLine respects layer bounds',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [16, 16], 'line-layer');
+      const bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawLine(2, 2, 14, 14, 2, 7, 6, bounds);
+
+      const onLine = sampleQuadtreeValue(layer.quadtree, 8, 8, bounds);
+      const offLine = sampleQuadtreeValue(layer.quadtree, 8, 2, bounds);
+
+      assert.equal(onLine, 7);
+      assert.equal(offLine, 0);
+    },
+  },
+  {
     name: 'Map can be saved to and loaded from file',
     run: async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gaia-map-'));
@@ -105,8 +153,8 @@ const tests = [
       assert.deepEqual(loaded.layer.pos, map.layer.pos);
       assert.deepEqual(loaded.layer.size, map.layer.size);
       assert.equal(loaded.layer.quadtree.value, map.layer.quadtree.value);
-      assert.equal(loaded.layer.areas.length, 1);
-      assert.equal(loaded.layer.areas[0].name, 'area1');
+      assert.equal(loaded.layer.areas.length, 2);
+      assert.equal(loaded.layer.areas[1].name, 'area1');
       assert.equal(loaded.layer.children.length, 1);
       assert.equal(loaded.layer.children[0].name, 'child');
 

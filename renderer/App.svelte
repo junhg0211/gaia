@@ -41,7 +41,6 @@
         if (layer) {
           layer.areas.push(new AreaType(parseInt(areaId), color, layer, name))
           mapUpdate = (mapUpdate + 1) % 1000000
-          console.log(layer)
         }
       } else if (event.data.startsWith('NEWL:')) {
         const mapData = event.data.slice(5)
@@ -50,9 +49,26 @@
         if (parent) {
           parent.children.push(new LayerType(parseInt(layerId), new Quadtree(0), parent, [0,0], [1,1], name))
           mapUpdate = (mapUpdate + 1) % 1000000
-          console.log(parent)
+        }
+      } else if (event.data.startsWith('LINE:')) {
+        const mapData = event.data.slice(5)
+        const [ layerId, from, to, areaAndWidth ] = mapData.split(':')
+        const [ x1, y1 ] = from.split(',').map(v => parseInt(v))
+        const [ x2, y2 ] = to.split(',').map(v => parseInt(v))
+        const [ areaId, width ] = areaAndWidth.split(',').map(v => parseInt(v))
+        const layer = map.findLayer(parseInt(layerId))
+        if (layer) {
+          layer.expandTo(x1, y1)
+          layer.expandTo(x2, y2)
+          const [px, py] = layer.pos ?? [0, 0]
+          const [sx, sy] = layer.size ?? [1, 1]
+          const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+          layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, undefined, bounds)
+          console.log(layer)
+          updateCanvas()
         }
       }
+
     }
     ws.onclose = () => {
       connected = false
@@ -228,11 +244,7 @@
 
     // draw map
     if (map) {
-      const mapScreenX = camera.toScreenX(0)
-      const mapScreenY = camera.toScreenY(0)
-      const mapWidth = map.width * camera.zoom
-      const mapHeight = map.height * camera.zoom
-      map.draw(ctx, mapScreenX, mapScreenY, mapWidth, mapHeight)
+      map.draw(ctx, canvas, camera)
     }
 
     // Draw grid
