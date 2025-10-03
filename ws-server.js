@@ -100,11 +100,14 @@ function handleMessage(ws, message) {
       return;
     }
 
+    layer.expandTo(x1, y1);
+    layer.expandTo(x2, y2);
     const [px, py] = layer.pos ?? [0, 0];
     const [sx, sy] = layer.size ?? [1, 1];
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
     layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, undefined, bounds);
+    console.log(layer.quadtree);
 
     const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}`;
     for (const [clientWs] of clients) {

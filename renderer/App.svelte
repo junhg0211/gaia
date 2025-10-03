@@ -79,13 +79,21 @@
     }
   }
 
+  function reloadMap() {
+    if (ws && connected) {
+      ws.send(`LOAD`)
+      mapUpdate = (mapUpdate + 1) % 1000000
+    }
+  }
+
   let logContainer
-  function addLogEntry(entry) {
+  async function addLogEntry(entry) {
     log = [...log, entry]
     log = log.slice(-100) // Keep only the last 100 entries
 
     // Scroll to the bottom of the log container
     if (logContainer) {
+      await tick()
       logContainer.scrollTo(0, logContainer.scrollHeight + 100)
     }
   }
@@ -451,7 +459,10 @@
   <div class="header">
     <div>Gaia</div>
     {#if connected}
-      <div>Connected to WebSocket server</div>
+      <div>
+        <button on:click={reloadMap}>Reload Map</button>
+        Connected to WebSocket server
+      </div>
     {:else}
       <div>
         <input type="text" placeholder="Username" bind:value={username} />
