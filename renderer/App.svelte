@@ -10,7 +10,7 @@
 
   let log = []
   const cursors = {}
-  let username = ""
+  let username = "User"
 
   let wsAddress = 'localhost:48829'
   function connect() {
@@ -29,8 +29,7 @@
         map = deserializeMap(JSON.parse(mapData))
         updateCanvas()
       } else if (event.data.startsWith('CURSOR:')) {
-        const [id, coords] = event.data.slice(7).split(':')
-        const [x, y] = coords.split(',').map(Number)
+        const [id, x, y] = event.data.slice(7).split(',')
         cursors[id] = { x, y }
         updateCanvas()
       }
@@ -206,6 +205,19 @@
       ctx.lineTo(canvas.width, y)
     }
     ctx.stroke()
+
+    // draw cursors
+    for (const id in cursors) {
+      const cursor = cursors[id]
+      const screenX = camera.toScreenX(cursor.x)
+      const screenY = camera.toScreenY(cursor.y)
+      ctx.fillStyle = 'red'
+      ctx.beginPath()
+      ctx.arc(screenX, screenY, 5, 0, 2 * Math.PI)
+      ctx.fill()
+      ctx.fillStyle = 'black'
+      ctx.fillText(id, screenX + 8, screenY - 8)
+    }
   }
 
   const tools = [
