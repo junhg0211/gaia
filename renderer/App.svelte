@@ -93,7 +93,7 @@
 
     window.addEventListener('resize', resizeCanvas)
     window.addEventListener('wheel', handleWheel, { passive: true })
-    window.addEventListener("mousebuttondown", mouseButtonDownHandler);
+    window.addEventListener('mousedown', mouseButtonDownHandler)
     window.addEventListener("mousemove", mouseMoveHandler);
     window.addEventListener("mouseup", mouseButtonUpHandler);
   })
