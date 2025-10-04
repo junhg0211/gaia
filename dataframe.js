@@ -109,6 +109,14 @@ function polygonIntersectsRect(points, rect, cachedBounds) {
   const bounds = cachedBounds ?? polygonBounds(points);
   if (!rectsOverlap(rect, bounds)) return false;
 
+  if (
+    rect.minX >= bounds.minX && rect.maxX <= bounds.maxX &&
+    rect.minY >= bounds.minY && rect.maxY <= bounds.maxY &&
+    points.length === 0
+  ) {
+    return false;
+  }
+
   const corners = [
     [rect.minX, rect.minY],
     [rect.maxX, rect.minY],
@@ -135,6 +143,30 @@ function polygonIntersectsRect(points, rect, cachedBounds) {
   }
 
   return false;
+}
+
+function circleContainsRect(cx, cy, radius, rect) {
+  const corners = [
+    [rect.minX, rect.minY],
+    [rect.maxX, rect.minY],
+    [rect.maxX, rect.maxY],
+    [rect.minX, rect.maxY],
+  ];
+
+  for (const [x, y] of corners) {
+    if (Math.hypot(x - cx, y - cy) > radius + EPSILON) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function circleIntersectsRect(cx, cy, radius, rect) {
+  const closestX = Math.max(rect.minX, Math.min(cx, rect.maxX));
+  const closestY = Math.max(rect.minY, Math.min(cy, rect.maxY));
+  const distance = Math.hypot(closestX - cx, closestY - cy);
+  return distance <= radius + EPSILON;
 }
 
 function polygonContainsRect(points, rect) {
@@ -373,24 +405,33 @@ class Quadtree {
     }
   }
 
-  drawCircle(x, y, radius, value, depth = 11) {
-    if (depth === 0) {
-      const contained = Math.hypot(x - 0.5, y - 0.5) <= radius;
-      if (contained) this.set(value);
+  drawCircle(x, y, radius, value, depth = 11, bounds) {
+    const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+    if (!circleIntersectsRect(x, y, radius, nodeBounds)) return;
+
+    if (circleContainsRect(x, y, radius, nodeBounds) || depth === 0) {
+      this.set(value);
       return;
     }
 
     this.divide();
 
-    const distLU = Math.hypot(x - 0, y - 0);
-    const distRU = Math.hypot(x - 1, y - 0);
-    const distLD = Math.hypot(x - 0, y - 1);
-    const distRD = Math.hypot(x - 1, y - 1);
+    const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
+    const midY = (nodeBounds.minY + nodeBounds.maxY) / 2;
 
-    if (distLU <= radius) this.children[0].drawCircle((x - 0) * 2, (y - 0) * 2, radius * 2, value, depth - 1);
-    if (distRU <= radius) this.children[1].drawCircle((x - 1) * 2, (y - 0) * 2, radius * 2, value, depth - 1);
-    if (distLD <= radius) this.children[2].drawCircle((x - 0) * 2, (y - 1) * 2, radius * 2, value, depth - 1);
-    if (distRD <= radius) this.children[3].drawCircle((x - 1) * 2, (y - 1) * 2, radius * 2, value, depth - 1);
+    const childBounds = [
+      { minX: nodeBounds.minX, minY: nodeBounds.minY, maxX: midX, maxY: midY },
+      { minX: midX, minY: nodeBounds.minY, maxX: nodeBounds.maxX, maxY: midY },
+      { minX: nodeBounds.minX, minY: midY, maxX: midX, maxY: nodeBounds.maxY },
+      { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY },
+    ];
+
+    for (let i = 0; i < 4; i++) {
+      const childBound = childBounds[i];
+      if (!circleIntersectsRect(x, y, radius, childBound)) continue;
+      this.children[i].drawCircle(x, y, radius, value, depth - 1, childBound);
+    }
 
     this.tryMerge();
   }
@@ -445,6 +486,10 @@ class Quadtree {
 
   drawLine(x1, y1, x2, y2, width, value, depth = 11, bounds) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+    this.drawCircle(x1, y1, width / 2, value, depth, nodeBounds);
+    this.drawCircle(x2, y2, width / 2, value, depth, nodeBounds);
+
     const dx = x2 - x1;
     const dy = y2 - y1;
     const length = Math.hypot(dx, dy);

@@ -589,6 +589,51 @@
         }
       }
     },
+    {
+      name: "브러시",
+      icon: "brush",
+      hotkey: "b",
+      vars: {
+        brushing: false,
+        width: 10,
+        previousX: 0, previousY: 0,
+      },
+      onmousedown: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.brushing = true
+          nowTool.vars.previousX = e.clientX
+          nowTool.vars.previousY = e.clientY
+        }
+      },
+      onmousemove: (e) => {
+        if (e.button !== 0) return
+        if (!nowTool.vars.brushing) return;
+
+        const startX = parseInt(camera.toWorldX(nowTool.vars.previousX - canvas.getBoundingClientRect().left))
+        const startY = parseInt(camera.toWorldY(nowTool.vars.previousY - canvas.getBoundingClientRect().top))
+        const endX = parseInt(camera.toWorldX(e.clientX - canvas.getBoundingClientRect().left))
+        const endY = parseInt(camera.toWorldY(e.clientY - canvas.getBoundingClientRect().top))
+        ws.send(`LINE:${selectedArea.parent.id}:${startX},${startY}:${endX},${endY}:${selectedArea.id},${nowTool.vars.width}`)
+
+        nowTool.vars.previousX = e.clientX
+        nowTool.vars.previousY = e.clientY
+
+        updateCanvas()
+      },
+      onmouseup: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.brushing = false
+        }
+      },
+      onwheel: (e) => {
+        if (e.deltaY < 0) {
+          nowTool.vars.width = Math.min(nowTool.vars.width + 1, 100)
+        } else {
+          nowTool.vars.width = Math.max(nowTool.vars.width - 1, 1)
+        }
+        updateCanvas()
+      },
+    },
   ]
   let nowTool = tools[0]
 
