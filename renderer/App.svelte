@@ -20,6 +20,8 @@
   let selectedArea
 
   async function addLogEntry(entry) {
+    if (entry.startsWith('CURSOR:')) return
+
     log = [...log, entry]
     log = log.slice(-100)
     if (logContainer) {
@@ -178,7 +180,7 @@
       <div class="layers">
         {#if map}
         {#key mapUpdate}
-        <Map {map} {ws} on:areaselect={handleAreaSelect} />
+        <Map {selectedArea} {map} {ws} on:areaselect={handleAreaSelect} />
         {/key}
         {:else}
         <div>No map loaded</div>
@@ -189,7 +191,6 @@
         <div>{entry}</div>
         {/each}
       </div>
-      <div class="minimap"></div>
     </div>
   </div>
 </div>
@@ -243,10 +244,6 @@
     height: 150px;
     border-bottom: 1px solid #ccc;
     overflow-y: auto;
-  }
-  .minimap {
-    height: 100px;
-    background-color: #d0d0d0;
   }
   button {
     padding: 0.5rem 1rem;

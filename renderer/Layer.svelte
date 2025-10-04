@@ -5,6 +5,7 @@
 
   export let layer;
   export let ws;
+  export let selectedArea;
 
   let color = "#ff0000";
   let name = "new area";
@@ -36,7 +37,7 @@
       <input type="text" bind:value={name} />
     </div>
     {#each layer.areas as area}
-    <Area {ws} {area} on:areaselect />
+    <Area {ws} {area} {selectedArea} on:areaselect />
     {/each}
   </div>
   <div>
@@ -45,7 +46,7 @@
       <input type="text" bind:value={layerName} />
     </div>
     {#each layer.children as child}
-    <Layer {ws} layer={child} />
+    <Layer {ws} {selectedArea} layer={child} />
     {/each}
   </div>
 </div>

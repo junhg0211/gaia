@@ -3,6 +3,7 @@
 
   export let area;
   export let ws;
+  export let selectedArea;
 
   const dispatch = createEventDispatcher();
 
@@ -15,7 +16,7 @@
   }
 </script>
 
-<div class="area-container">
+<div class="area-container" class:selected={selectedArea && selectedArea.id === area.id} on:click={selectArea}>
   <div>{area.name} <span style="color: {area.color};">•</span></div>
   <div>
     <button on:click={deleteArea}>영역 삭제</button>
@@ -29,5 +30,9 @@
   .area-container {
     padding-left: 4px;
     border-left: 1px solid #ccc;
+  }
+
+  .selected {
+    background-color: #d0d0d0;
   }
 </style>

@@ -152,6 +152,12 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
+  const handleDisconnectMessage = (data) => {
+    const username = data.slice(11)
+    delete getCursors?.()[username]
+    updateCanvas?.()
+  }
+
   const handleErrorMessage = (data) => {
     const message = data.slice(4)
     addLogEntry?.(`Error from server: ${message}`)
@@ -176,6 +182,8 @@ export function createWebSocketManager({
       handleRectMessage(data)
     } else if (data.startsWith('POLY:')) {
       handlePolygonMessage(data)
+    } else if (data.startsWith('DISCONNECT:')) {
+      handleDisconnectMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
     }

@@ -51,7 +51,8 @@ function handleMessage(ws, message) {
     const username = [...clients].find(([clientWs]) => clientWs === ws)[1];
     const broadcastMessage = `CURSOR:${username},${x},${y}`;
     for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
+      if (clientWs !== ws)
+        clientWs.send(broadcastMessage);
     }
     return;
   }
@@ -345,7 +346,17 @@ wss.on('connection', (ws, req) => {
   // 연결 종료 이벤트
   ws.on('close', () => {
     if (clients.has(ws)) {
+      console.log(`❌ Client disconnected: ${clientIP}`);
       clients.delete(ws);
+
+      // Notify other clients about disconnection
+      const username = [...clients].find(([clientWs]) => clientWs === ws)?.[1];
+      if (username) {
+        const broadcastMessage = `DISCONNECT:${username}`;
+        for (const [clientWs] of clients) {
+          clientWs.send(broadcastMessage);
+        }
+      }
     }
   });
 });
