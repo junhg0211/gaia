@@ -213,6 +213,7 @@
   .content {
     flex: 1;
     display: flex;
+    min-height: 0;
   }
   .toolbar-window {
     background-color: #e0e0e0;
@@ -235,14 +236,19 @@
     border-left: 1px solid #ccc;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
   }
   .layers {
-    flex: 1;
+    flex: 1 1 0;
     border-bottom: 1px solid #ccc;
+    overflow-y: auto;
+    min-height: 0;
   }
   .log {
-    height: 150px;
-    border-bottom: 1px solid #ccc;
+    flex: 0 0 150px;
+    min-height: 150px;
+    border-top: 1px solid #ccc;
     overflow-y: auto;
   }
   button {
