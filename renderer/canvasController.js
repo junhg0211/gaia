@@ -902,7 +902,19 @@ export function createCanvasController(options) {
   function handleWheel(event) {
     if (!withinCanvas(event)) return
     if (event.altKey) {
+      const rect = canvas?.getBoundingClientRect()
+      if (!rect) return
+      const mouseX = event.clientX - rect.left
+      const mouseY = event.clientY - rect.top
+      const worldX = camera.toWorldX(mouseX)
+      const worldY = camera.toWorldY(mouseY)
+      camera.x = worldX
+      camera.y = worldY
       camera.setZoom(camera.zoom * Math.exp(-event.deltaY * 0.001))
+      const newWorldX = camera.toWorldX(mouseX)
+      const newWorldY = camera.toWorldY(mouseY)
+      camera.x += worldX - newWorldX
+      camera.y += worldY - newWorldY
     } else if (event.shiftKey) {
       camera.x += event.deltaY / camera.zoom
     } else {
