@@ -63,6 +63,11 @@ function buildTools({
     previousY: 0,
   }
 
+  const lassoVars = {
+    active: false,
+    points: [],
+  }
+
   const tools = [
     {
       name: '선택',
@@ -382,6 +387,74 @@ function buildTools({
         ctx.textAlign = 'center'
         ctx.textBaseline = 'bottom'
         ctx.fillText(`${distanceStr} m`, (startX + endX) / 2, (startY + endY) / 2 - 5)
+      },
+    },
+    {
+      name: "올가미",
+      icon: 'feather',
+      hotkey: 'f',
+      vars: {
+        active: false,
+        points: [],
+      },
+      onstart: () => {
+        lassoVars.active = false
+        lassoVars.points = []
+      },
+      onmousedown: (event) => {
+        if (event.button === 0) {
+          lassoVars.active = true
+          lassoVars.points = [{ x: event.clientX, y: event.clientY }]
+        }
+      },
+      onmousemove: (event) => {
+        if (!lassoVars.active) return
+        lassoVars.points.push({ x: event.clientX, y: event.clientY })
+        updateCanvas()
+      },
+      onmouseup: (event) => {
+        if (event.button !== 0) return
+        if (!lassoVars.active) return
+        lassoVars.active = false
+        const selectedArea = getSelectedArea()
+        const map = getMap()
+        const canvas = getCanvas()
+        if (!selectedArea || !map || !canvas) return
+        if (lassoVars.points.length < 3) {
+          lassoVars.points = []
+          updateCanvas()
+          return
+        }
+        const worldPoints = lassoVars.points.map((point) => {
+          const wp = toWorldPoint(point.x, point.y)
+          return wp ? `${wp.x},${wp.y}` : null
+        }).filter(Boolean)
+        if (worldPoints.length !== lassoVars.points.length) {
+          lassoVars.points = []
+          updateCanvas()
+          return
+        }
+        sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}`)
+        lassoVars.points = []
+        updateCanvas()
+      },
+      render: (ctx) => {
+        if (lassoVars.points.length === 0) return
+        const rect = ensureCanvasRect()
+        if (!rect) return
+        ctx.strokeStyle = 'blue'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(lassoVars.points[0].x - rect.left, lassoVars.points[0].y - rect.top)
+        for (let i = 1; i < lassoVars.points.length; i += 1) {
+          ctx.lineTo(lassoVars.points[i].x - rect.left, lassoVars.points[i].y - rect.top)
+        }
+        if (lassoVars.active) {
+          ctx.lineTo(lassoVars.points[lassoVars.points.length - 1].x - rect.left, lassoVars.points[lassoVars.points.length - 1].y - rect.top)
+        } else {
+          ctx.closePath()
+        }
+        ctx.stroke()
       },
     },
   ]
