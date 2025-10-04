@@ -503,10 +503,11 @@ function buildTools({
       },
       onmousedown: (event) => {
         if (event.button === 0 && imageVars.image && imageVars.phase === 'idle') {
-          imageVars.positionX = event.clientX
-          imageVars.positionY = event.clientY
-          imageVars.width = imageVars.image.width / camera.zoom
-          imageVars.height = imageVars.image.height / camera.zoom
+          const rect = ensureCanvasRect()
+          imageVars.positionX = camera.toWorldX(event.clientX - (rect ? rect.left : 0))
+          imageVars.positionY = camera.toWorldY(event.clientY - (rect ? rect.top : 0))
+          imageVars.width = 1;
+          imageVars.height = 1;
           imageVars.phase = 'positioning'
           updateCanvas()
         }
@@ -521,8 +522,8 @@ function buildTools({
         if (!imageVars.image) return
         const rect = ensureCanvasRect()
         if (!rect) return
-        const x = imageVars.positionX - rect.left
-        const y = imageVars.positionY - rect.top
+        const x = camera.toScreenX(imageVars.positionX)
+        const y = camera.toScreenY(imageVars.positionY)
         const width = imageVars.width * camera.zoom
         const height = imageVars.height * camera.zoom
         ctx.strokeStyle = 'blue'
@@ -532,8 +533,9 @@ function buildTools({
       },
       onmousemove: (event) => {
         if (imageVars.phase === 'positioning') {
-          imageVars.width = (event.clientX - imageVars.positionX) / camera.zoom
-          imageVars.height = (event.clientY - imageVars.positionY) / camera.zoom
+          const rect = ensureCanvasRect()
+          imageVars.width = Math.max(1, camera.toWorldX(event.clientX - (rect ? rect.left : 0)) - imageVars.positionX)
+          imageVars.height = Math.max(1, camera.toWorldY(event.clientY - (rect ? rect.top : 0)) - imageVars.positionY)
           updateCanvas()
         }
 
@@ -541,36 +543,36 @@ function buildTools({
           // change cursor based on position
           const rect = ensureCanvasRect()
           if (!rect) return
-          const x = imageVars.positionX - rect.left
-          const y = imageVars.positionY - rect.top
-          const width = imageVars.width * camera.zoom
-          const height = imageVars.height * camera.zoom
+          const x = camera.toScreenX(imageVars.positionX)
+          const y = camera.toScreenY(imageVars.positionY)
           const mouseX = event.clientX - rect.left
           const mouseY = event.clientY - rect.top
+          const width = imageVars.width * camera.zoom
+          const height = imageVars.height * camera.zoom
 
           const edgeSize = 10
-          if (mouseX >= x - edgeSize && mouseX <= x + edgeSize &&
-              mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
-            document.body.style.cursor = 'nwse-resize'
-            imageVars.nearestEdge = 'top-left'
-          } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize &&
-                     mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
-            document.body.style.cursor = 'nesw-resize'
-            imageVars.nearestEdge = 'top-right'
-          } else if (mouseX >= x - edgeSize && mouseX <= x + edgeSize &&
-                     mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
-            document.body.style.cursor = 'nesw-resize'
-            imageVars.nearestEdge = 'bottom-left'
-          } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize &&
-                      mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
-            document.body.style.cursor = 'nwse-resize'
-            imageVars.nearestEdge = 'bottom-right'
-          } if (mouseX >= x - edgeSize && mouseX <= x + edgeSize) {
-            document.body.style.cursor = 'ew-resize'
-            imageVars.nearestEdge = 'left'
+          if (mouseX >= x - edgeSize && mouseX <= x + edgeSize) {
+            if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
+              document.body.style.cursor = 'nwse-resize'
+              imageVars.nearestEdge = 'top-left'
+            } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+              document.body.style.cursor = 'nesw-resize'
+              imageVars.nearestEdge = 'bottom-left'
+            } else {
+              document.body.style.cursor = 'ew-resize'
+              imageVars.nearestEdge = 'left'
+            }
           } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize) {
-            document.body.style.cursor = 'ew-resize'
-            imageVars.nearestEdge = 'right'
+            if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
+              document.body.style.cursor = 'nesw-resize'
+              imageVars.nearestEdge = 'top-right'
+            } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+              document.body.style.cursor = 'nwse-resize'
+              imageVars.nearestEdge = 'bottom-right'
+            } else {
+              document.body.style.cursor = 'ew-resize'
+              imageVars.nearestEdge = 'right'
+            }
           } else if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
             document.body.style.cursor = 'ns-resize'
             imageVars.nearestEdge = 'top'
@@ -586,71 +588,54 @@ function buildTools({
         if (imageVars.phase.startsWith('resize-') && imageVars.nearestEdge) {
           const rect = ensureCanvasRect()
           if (!rect) return
-          const mouseX = event.clientX - rect.left
-          const mouseY = event.clientY - rect.top
-
-          if (imageVars.nearestEdge === 'left') {
-            const newWidth = (imageVars.positionX + imageVars.width * camera.zoom - event.clientX) / camera.zoom
-            if (newWidth > 1) {
-              imageVars.width = newWidth
-              imageVars.positionX = event.clientX
-            }
-          } else if (imageVars.nearestEdge === 'right') {
-            const newWidth = (event.clientX - imageVars.positionX) / camera.zoom
-            if (newWidth > 1) {
-              imageVars.width = newWidth
-            }
-          } else if (imageVars.nearestEdge === 'top') {
-            const newHeight = (imageVars.positionY + imageVars.height * camera.zoom - event.clientY) / camera.zoom
-            if (newHeight > 1) {
-              imageVars.height = newHeight
-              imageVars.positionY = event.clientY
-            }
-          } else if (imageVars.nearestEdge === 'bottom') {
-            const newHeight = (event.clientY - imageVars.positionY) / camera.zoom
-            if (newHeight > 1) {
-              imageVars.height = newHeight
-            }
-          } else if (imageVars.nearestEdge === 'top-left') {
-            const newWidth = (imageVars.positionX + imageVars.width * camera.zoom - event.clientX) / camera.zoom
-            const newHeight = (imageVars.positionY + imageVars.height * camera.zoom - event.clientY) / camera.zoom
-            if (newWidth > 1) {
-              imageVars.width = newWidth
-              imageVars.positionX = event.clientX
-            }
-            if (newHeight > 1) {
-              imageVars.height = newHeight
-              imageVars.positionY = event.clientY
-            }
-          } else if (imageVars.nearestEdge === 'top-right') {
-            const newWidth = (event.clientX - imageVars.positionX) / camera.zoom
-            const newHeight = (imageVars.positionY + imageVars.height * camera.zoom - event.clientY) / camera.zoom 
-            if (newWidth > 1) {
-              imageVars.width = newWidth
-            }
-            if (newHeight > 1) {
-              imageVars.height = newHeight
-              imageVars.positionY = event.clientY
-            }
-          } else if (imageVars.nearestEdge === 'bottom-left') {
-            const newWidth = (imageVars.positionX + imageVars.width * camera.zoom - event.clientX) / camera.zoom
-            const newHeight = (event.clientY - imageVars.positionY) / camera.zoom
-            if (newWidth > 1) {
-              imageVars.width = newWidth
-              imageVars.positionX = event.clientX
-            }
-            if (newHeight > 1) {
-              imageVars.height = newHeight
-            }
-          } else if (imageVars.nearestEdge === 'bottom-right') {
-            const newWidth = (event.clientX - imageVars.positionX) / camera.zoom
-            const newHeight = (event.clientY - imageVars.positionY) / camera.zoom
-            if (newWidth > 1) {
-              imageVars.width = newWidth
-            }
-            if (newHeight > 1) {
-              imageVars.height = newHeight
-            }
+          const mouseWorldX = camera.toWorldX(event.clientX - rect.left)
+          const mouseWorldY = camera.toWorldY(event.clientY - rect.top)
+          switch (imageVars.nearestEdge) {
+            case 'top-left':
+              imageVars.width += imageVars.positionX - mouseWorldX
+              imageVars.width = Math.max(1, imageVars.width)
+              imageVars.height += imageVars.positionY - mouseWorldY
+              imageVars.height = Math.max(1, imageVars.height)
+              imageVars.positionX = mouseWorldX
+              imageVars.positionY = mouseWorldY
+              break
+            case 'top-right':
+              imageVars.width = mouseWorldX - imageVars.positionX
+              imageVars.height += imageVars.positionY - mouseWorldY
+              imageVars.height = Math.max(1, imageVars.height)
+              imageVars.positionY = mouseWorldY
+              break
+            case 'bottom-left':
+              imageVars.width += imageVars.positionX - mouseWorldX
+              imageVars.width = Math.max(1, imageVars.width)
+              imageVars.height = mouseWorldY - imageVars.positionY
+              imageVars.height = Math.max(1, imageVars.height)
+              imageVars.positionX = mouseWorldX
+              break
+            case 'bottom-right':
+              imageVars.width = mouseWorldX - imageVars.positionX
+              imageVars.width = Math.max(1, imageVars.width)
+              imageVars.height = mouseWorldY - imageVars.positionY
+              imageVars.height = Math.max(1, imageVars.height)
+              break
+            case 'left':
+              imageVars.width += imageVars.positionX - mouseWorldX
+              imageVars.width = Math.max(1, imageVars.width)
+              imageVars.positionX = mouseWorldX
+              break
+            case 'right':
+              imageVars.width = mouseWorldX - imageVars.positionX
+              imageVars.width = Math.max(1, imageVars.width)
+              break
+            case 'top':
+              imageVars.height += imageVars.positionY - mouseWorldY
+              imageVars.height = Math.max(1, imageVars.height)
+              imageVars.positionY = mouseWorldY
+              break
+            case 'bottom':
+              imageVars.height = mouseWorldY - imageVars.positionY
+              imageVars.height = Math.max(1, imageVars.height)
+              break
           }
 
           updateCanvas()
