@@ -75,6 +75,8 @@ function buildTools({
     width: 0,
     height: 0,
     phase: 'idle', // 'idle', 'positioning', 'resizing'
+                   // 'resize-top', 'resize-bottom', 'resize-left', 'resize-right',
+    nearestEdge: null,
   }
 
   const tools = [
@@ -507,8 +509,14 @@ function buildTools({
           imageVars.phase = 'positioning'
           updateCanvas()
         }
+
+        if (event.button === 0 && imageVars.phase === 'resizing' && imageVars.nearestEdge) {
+          // resizing start
+          imageVars.phase = `resize-${imageVars.nearestEdge}`
+        }
       },
       render: (ctx) => {
+        if (imageVars.phase === 'idle') return
         if (!imageVars.image) return
         const rect = ensureCanvasRect()
         if (!rect) return
@@ -527,12 +535,80 @@ function buildTools({
           imageVars.height = (event.clientY - imageVars.positionY) / camera.zoom
           updateCanvas()
         }
+
+        if (imageVars.phase === 'resizing') {
+          // change cursor based on position
+          const rect = ensureCanvasRect()
+          if (!rect) return
+          const x = imageVars.positionX - rect.left
+          const y = imageVars.positionY - rect.top
+          const width = imageVars.width * camera.zoom
+          const height = imageVars.height * camera.zoom
+          const mouseX = event.clientX - rect.left
+          const mouseY = event.clientY - rect.top
+
+          const edgeSize = 10
+          if (mouseX >= x - edgeSize && mouseX <= x + edgeSize) {
+            document.body.style.cursor = 'ew-resize'
+            imageVars.nearestEdge = 'left'
+          } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize) {
+            document.body.style.cursor = 'ew-resize'
+            imageVars.nearestEdge = 'right'
+          } else if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
+            document.body.style.cursor = 'ns-resize'
+            imageVars.nearestEdge = 'top'
+          } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+            document.body.style.cursor = 'ns-resize'
+            imageVars.nearestEdge = 'bottom'
+          } else {
+            document.body.style.cursor = 'default'
+            imageVars.nearestEdge = null
+          }
+        }
+
+        if (imageVars.phase.startsWith('resize-') && imageVars.nearestEdge) {
+          const rect = ensureCanvasRect()
+          if (!rect) return
+          const mouseX = event.clientX - rect.left
+          const mouseY = event.clientY - rect.top
+
+          if (imageVars.nearestEdge === 'left') {
+            const newWidth = (imageVars.positionX + imageVars.width * camera.zoom - event.clientX) / camera.zoom
+            if (newWidth > 1) {
+              imageVars.width = newWidth
+              imageVars.positionX = event.clientX
+            }
+          } else if (imageVars.nearestEdge === 'right') {
+            const newWidth = (event.clientX - imageVars.positionX) / camera.zoom
+            if (newWidth > 1) {
+              imageVars.width = newWidth
+            }
+          } else if (imageVars.nearestEdge === 'top') {
+            const newHeight = (imageVars.positionY + imageVars.height * camera.zoom - event.clientY) / camera.zoom
+            if (newHeight > 1) {
+              imageVars.height = newHeight
+              imageVars.positionY = event.clientY
+            }
+          } else if (imageVars.nearestEdge === 'bottom') {
+            const newHeight = (event.clientY - imageVars.positionY) / camera.zoom
+            if (newHeight > 1) {
+              imageVars.height = newHeight
+            }
+          }
+          updateCanvas()
+        }
       },
       onmouseup: (event) => {
         if (event.button !== 0) return
 
         if (imageVars.phase === 'positioning') {
           imageVars.phase = 'resizing'
+        }
+
+        if (imageVars.phase.startsWith('resize-')) {
+          imageVars.phase = 'resizing'
+          imageVars.nearestEdge = null
+          document.body.style.cursor = 'default'
         }
       }
     },
