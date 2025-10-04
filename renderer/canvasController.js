@@ -76,6 +76,7 @@ function buildTools({
     height: 0,
     phase: 'idle', // 'idle', 'positioning', 'resizing'
                    // 'resize-top', 'resize-bottom', 'resize-left', 'resize-right',
+                   // 'resize-top-left', 'resize-top-right', 'resize-bottom-left', 'resize-bottom-right'
     nearestEdge: null,
   }
 
@@ -548,7 +549,23 @@ function buildTools({
           const mouseY = event.clientY - rect.top
 
           const edgeSize = 10
-          if (mouseX >= x - edgeSize && mouseX <= x + edgeSize) {
+          if (mouseX >= x - edgeSize && mouseX <= x + edgeSize &&
+              mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
+            document.body.style.cursor = 'nwse-resize'
+            imageVars.nearestEdge = 'top-left'
+          } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize &&
+                     mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
+            document.body.style.cursor = 'nesw-resize'
+            imageVars.nearestEdge = 'top-right'
+          } else if (mouseX >= x - edgeSize && mouseX <= x + edgeSize &&
+                     mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+            document.body.style.cursor = 'nesw-resize'
+            imageVars.nearestEdge = 'bottom-left'
+          } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize &&
+                      mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+            document.body.style.cursor = 'nwse-resize'
+            imageVars.nearestEdge = 'bottom-right'
+          } if (mouseX >= x - edgeSize && mouseX <= x + edgeSize) {
             document.body.style.cursor = 'ew-resize'
             imageVars.nearestEdge = 'left'
           } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize) {
@@ -594,7 +611,48 @@ function buildTools({
             if (newHeight > 1) {
               imageVars.height = newHeight
             }
+          } else if (imageVars.nearestEdge === 'top-left') {
+            const newWidth = (imageVars.positionX + imageVars.width * camera.zoom - event.clientX) / camera.zoom
+            const newHeight = (imageVars.positionY + imageVars.height * camera.zoom - event.clientY) / camera.zoom
+            if (newWidth > 1) {
+              imageVars.width = newWidth
+              imageVars.positionX = event.clientX
+            }
+            if (newHeight > 1) {
+              imageVars.height = newHeight
+              imageVars.positionY = event.clientY
+            }
+          } else if (imageVars.nearestEdge === 'top-right') {
+            const newWidth = (event.clientX - imageVars.positionX) / camera.zoom
+            const newHeight = (imageVars.positionY + imageVars.height * camera.zoom - event.clientY) / camera.zoom 
+            if (newWidth > 1) {
+              imageVars.width = newWidth
+            }
+            if (newHeight > 1) {
+              imageVars.height = newHeight
+              imageVars.positionY = event.clientY
+            }
+          } else if (imageVars.nearestEdge === 'bottom-left') {
+            const newWidth = (imageVars.positionX + imageVars.width * camera.zoom - event.clientX) / camera.zoom
+            const newHeight = (event.clientY - imageVars.positionY) / camera.zoom
+            if (newWidth > 1) {
+              imageVars.width = newWidth
+              imageVars.positionX = event.clientX
+            }
+            if (newHeight > 1) {
+              imageVars.height = newHeight
+            }
+          } else if (imageVars.nearestEdge === 'bottom-right') {
+            const newWidth = (event.clientX - imageVars.positionX) / camera.zoom
+            const newHeight = (event.clientY - imageVars.positionY) / camera.zoom
+            if (newWidth > 1) {
+              imageVars.width = newWidth
+            }
+            if (newHeight > 1) {
+              imageVars.height = newHeight
+            }
           }
+
           updateCanvas()
         }
       },
