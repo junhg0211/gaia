@@ -163,7 +163,7 @@
   <div class="content">
     <div class="toolbar-window">
       {#each tools as tool}
-      <div>
+      <div class="tool-button">
         <button title={tool.name} disabled={nowTool === tool} on:click={selectTool(tool)}>
           <i class="bi bi-{tool.icon}"></i>
           <!-- {tool.name} ({tool.hotkey.toUpperCase()}) -->
@@ -216,6 +216,13 @@
   .toolbar-window {
     background-color: #e0e0e0;
     border-right: 1px solid #ccc;
+  }
+  .tool-button button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
   }
   .workspace {
     flex: 1;
