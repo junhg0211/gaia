@@ -16,11 +16,11 @@ if (fs.existsSync('map.gaia')) {
 }
 
 const clients = new Set();
-let saveCounter = 50;
+let saveCounter = 1000;
 async function handleMessage(ws, message) {
   saveCounter--;
   if (saveCounter <= 0) {
-    saveCounter = 50;
+    saveCounter = 1000 * clients.size + 1000;
     fs.writeFile('map.gaia', JSON.stringify(serializeMap(map)), (err) => {
       if (err) {
         console.error('Auto-save error:', err);

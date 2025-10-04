@@ -258,15 +258,18 @@ class Map {
 
 let layerHighestId = 0;
 
-function getLayerHughestId() {
+function getLayerHighestId() {
   return layerHighestId;
 }
 
 function setLayerHighestId(id) {
-  if (typeof id === 'number' && id >= layerHighestId) {
-    layerHighestId = id;
+  if (typeof id !== 'number' || !Number.isFinite(id)) {
+    throw new TypeError('Layer highest id must be a finite number');
   }
+  layerHighestId = Math.max(0, Math.trunc(id));
 }
+
+const getLayerHughestId = getLayerHighestId;
 
 class Layer {
   constructor(id, quadtree, parent, pos, size, name) {
@@ -336,9 +339,10 @@ function getAreaHighestId() {
 }
 
 function setAreaHighestId(id) {
-  if (typeof id === 'number' && id >= areaHighestId) {
-    areaHighestId = id;
+  if (typeof id !== 'number' || !Number.isFinite(id)) {
+    throw new TypeError('Area highest id must be a finite number');
   }
+  areaHighestId = Math.max(0, Math.trunc(id));
 }
 
 class Area {
@@ -657,6 +661,7 @@ export {
   Quadtree,
   serializeMap,
   deserializeMap,
+  getLayerHighestId,
   getLayerHughestId,
   setLayerHighestId,
   getAreaHighestId,
