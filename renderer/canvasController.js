@@ -68,6 +68,15 @@ function buildTools({
     points: [],
   }
 
+  const imageVars = {
+    image: null,
+    positionX: 0,
+    positionY: 0,
+    width: 0,
+    height: 0,
+    phase: 'idle', // 'idle', 'positioning', 'resizing'
+  }
+
   const tools = [
     {
       name: '선택',
@@ -456,6 +465,76 @@ function buildTools({
         }
         ctx.stroke()
       },
+    },
+    {
+      name: "이미지 삽입",
+      icon: 'image',
+      hotkey: 'a',
+      onstart: () => {
+        imageVars.image = null
+        imageVars.positionX = 0
+        imageVars.positionY = 0
+        imageVars.width = 0
+        imageVars.height = 0
+        imageVars.phase = 'idle'
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'image/*'
+        input.onchange = (e) => {
+          const file = e.target.files[0]
+          if (!file) return
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            const img = new Image()
+            img.onload = () => {
+              imageVars.image = img
+              imageVars.width = img.width
+              imageVars.height = img.height
+              updateCanvas()
+            }
+            img.src = event.target.result
+          }
+          reader.readAsDataURL(file)
+        }
+        input.click()
+      },
+      onmousedown: (event) => {
+        if (event.button === 0 && imageVars.image && imageVars.phase === 'idle') {
+          imageVars.positionX = event.clientX
+          imageVars.positionY = event.clientY
+          imageVars.width = imageVars.image.width / camera.zoom
+          imageVars.height = imageVars.image.height / camera.zoom
+          imageVars.phase = 'positioning'
+          updateCanvas()
+        }
+      },
+      render: (ctx) => {
+        if (!imageVars.image) return
+        const rect = ensureCanvasRect()
+        if (!rect) return
+        const x = imageVars.positionX - rect.left
+        const y = imageVars.positionY - rect.top
+        const width = imageVars.width * camera.zoom
+        const height = imageVars.height * camera.zoom
+        ctx.strokeStyle = 'blue'
+        ctx.lineWidth = 2
+        ctx.strokeRect(x, y, width, height)
+        ctx.drawImage(imageVars.image, x, y, width, height)
+      },
+      onmousemove: (event) => {
+        if (imageVars.phase === 'positioning') {
+          imageVars.width = (event.clientX - imageVars.positionX) / camera.zoom
+          imageVars.height = (event.clientY - imageVars.positionY) / camera.zoom
+          updateCanvas()
+        }
+      },
+      onmouseup: (event) => {
+        if (event.button !== 0) return
+
+        if (imageVars.phase === 'positioning') {
+          imageVars.phase = 'resizing'
+        }
+      }
     },
   ]
 
