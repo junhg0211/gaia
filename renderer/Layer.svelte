@@ -26,27 +26,25 @@
 </script>
 
 <div class="layer-container">
-  <div>{layer.name}</div>
+  <div class="name">{layer.name}</div>
   <div>
     <button on:click={deleteLayer}>레이어 삭제</button>
-  </div>
-  <div>
-    <button on:click={addArea}>영역 추가</button>
-    <div>
+    <div class="add-area-inputs">
       <input type="color" bind:value={color} />
       <input type="text" bind:value={name} />
+      <button on:click={addArea}>영역 추가</button>
     </div>
     {#each layer.areas as area}
     <Area {ws} {area} {selectedArea} on:areaselect />
     {/each}
   </div>
-  <div>
-    <button on:click={addLayer}>레이어 추가</button>
-    <div>
+  <div class="child-layers">
+    <div class="add-layer-inputs">
       <input type="text" bind:value={layerName} />
+      <button on:click={addLayer}>레이어 추가</button>
     </div>
     {#each layer.children as child}
-    <Layer {ws} {selectedArea} layer={child} />
+    <Layer {ws} {selectedArea} layer={child} on:areaselect />
     {/each}
   </div>
 </div>
@@ -55,5 +53,27 @@
   .layer-container {
     padding-left: 4px;
     border-left: 1px solid #ccc;
+    margin-left: 4px;
+  }
+  .name {
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .add-area-inputs, .add-layer-inputs {
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  .add-area-inputs input[type="text"], .add-layer-inputs input[type="text"] {
+    margin-left: 4px;
+  }
+  input[type="color"] {
+    padding: 0;
+    border: none;
+    width: 32px;
+    vertical-align: middle;
+    background: none;
+  }
+  .child-layers {
+    margin-top: 8px;
   }
 </style>

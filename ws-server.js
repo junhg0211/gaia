@@ -160,7 +160,7 @@ function handleMessage(ws, message) {
       return;
     }
 
-    const newLayer = new Layer(null, new Quadtree(null), parentLayer, [0, 0], [1, 1], layerName);
+    const newLayer = new Layer(null, new Quadtree(0), parentLayer, [0, 0], [1, 1], layerName);
     parentLayer.children.push(newLayer);
     ws.send(`OK`);
 
