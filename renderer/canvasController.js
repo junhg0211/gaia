@@ -21,8 +21,8 @@ function buildTools({
     const rect = ensureCanvasRect()
     if (!rect) return null
     return {
-      x: Math.trunc(camera.toWorldX(clientX - rect.left)),
-      y: Math.trunc(camera.toWorldY(clientY - rect.top)),
+      x: camera.toWorldX(clientX - rect.left),
+      y: camera.toWorldY(clientY - rect.top),
     }
   }
 
