@@ -137,6 +137,10 @@
     removeCanvasListeners?.()
     removeKeydownListener?.()
   })
+
+  const data = {
+    updateCanvas: redrawCanvas,
+  }
 </script>
 
 <svelte:head>
@@ -185,7 +189,7 @@
       <div class="layers">
         {#if map}
         {#key mapUpdate}
-        <Map {selectedArea} {map} {ws} on:areaselect={handleAreaSelect} />
+        <Map {data} {selectedArea} {map} {ws} on:areaselect={handleAreaSelect} />
         {/key}
         {:else}
         <div>No map loaded</div>

@@ -4,11 +4,12 @@
   export let map;
   export let ws;
   export let selectedArea;
+  export let data;
 </script>
 
 <div class="map-container">
   <div>{map.name}</div>
-  <Layer {selectedArea} {ws} layer={map.layer} on:areaselect />
+  <Layer {data} {selectedArea} {ws} layer={map.layer} on:areaselect />
 </div>
 
 <style>

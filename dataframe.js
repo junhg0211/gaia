@@ -245,7 +245,8 @@ class Map {
         drawNode(node.getChild(3), x + hw, y + hh, hw, hh, depth - 1);
       };
 
-      drawNode(layer.quadtree, x, y, w, h, depth);
+      if (layer.visible)
+        drawNode(layer.quadtree, x, y, w, h, depth);
 
       const reversedLayers = [...layer.children].reverse();
       for (const child of reversedLayers) {

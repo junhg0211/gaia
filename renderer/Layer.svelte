@@ -7,6 +7,9 @@
   export let layer;
   export let ws;
   export let selectedArea;
+  export let data;
+
+  const { updateCanvas } = data;
 
   let color = "#000000";
   let name = "새 영역";
@@ -41,10 +44,17 @@
     const index = layer.parent.children.indexOf(layer) + 2;
     ws.send(`LYOD:${layer.id}:${index}`);
   }
+
+  let visible = true;
+  $: {
+    layer.visible = visible
+    updateCanvas();
+  }
 </script>
 
 <div class="layer-container">
   <div class="name">
+    <input type="checkbox" bind:checked={visible} />
     <input type="checkbox" bind:checked={unfold} />
     <input type="text" bind:value={layer.name} on:change={changeLayerName} />
   </div>
@@ -65,7 +75,7 @@
       <button on:click={addLayer}><i class="bi bi-file-plus"></i></button>
     </div>
     {#each layer.children as child}
-    <Layer {ws} {selectedArea} layer={child} on:areaselect />
+    <Layer {data} {ws} {selectedArea} layer={child} on:areaselect />
     {/each}
   </div>
   {/if}
