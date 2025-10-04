@@ -75,12 +75,8 @@ function buildTools({
     image: null,
     positionX: 0,
     positionY: 0,
-    width: 0,
-    height: 0,
-    phase: 'idle', // 'idle', 'positioning', 'resizing'
-                   // 'resize-top', 'resize-bottom', 'resize-left', 'resize-right',
-                   // 'resize-top-left', 'resize-top-right', 'resize-bottom-left', 'resize-bottom-right'
-                   // 'resize-whole'
+    scale: 1,
+    phase: 'idle',
     nearestEdge: null,
     startX: 0,
     startY: 0,
@@ -512,8 +508,7 @@ function buildTools({
         imageVars.image = null
         imageVars.positionX = 0
         imageVars.positionY = 0
-        imageVars.width = 0
-        imageVars.height = 0
+        imageVars.scale = 1
         imageVars.phase = 'idle'
         const input = document.createElement('input')
         input.type = 'file'
@@ -526,8 +521,6 @@ function buildTools({
             const img = new Image()
             img.onload = () => {
               imageVars.image = img
-              imageVars.width = img.width
-              imageVars.height = img.height
               updateCanvas()
             }
             img.src = event.target.result
@@ -546,8 +539,8 @@ function buildTools({
           if (!layer || !quadtree) return
           const x1 = imageVars.positionX
           const y1 = imageVars.positionY
-          const x2 = imageVars.positionX + imageVars.width
-          const y2 = imageVars.positionY + imageVars.height
+          const x2 = imageVars.positionX + imageVars.image.width * imageVars.scale
+          const y2 = imageVars.positionY + imageVars.image.height * imageVars.scale
           layer.expandTo(x1, y1)
           layer.expandTo(x2, y2)
 
@@ -559,18 +552,20 @@ function buildTools({
           ct.drawImage(imageVars.image, 0, 0)
           const getColor = (x, y) => {
             const imgData = ct.getImageData(
-              Math.trunc(x * (imageVars.image.width / imageVars.width)),
-              Math.trunc(y * (imageVars.image.height / imageVars.height)), 1, 1)
+              clamp(Math.floor(x), 0, imageVars.image.width - 1),
+              clamp(Math.floor(y), 0, imageVars.image.height - 1),
+              1, 1
+            )
             const [r, g, b, a] = imgData.data
             return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
           }
 
-          const xSize = Math.max(1, imageVars.image.width / imageVars.width / camera.zoom)
-          const ySize = Math.max(1, imageVars.image.height / imageVars.height / camera.zoom)
-          for (let x = 0; x < imageVars.image.width; x++) {
-            for (let y = 0; y < imageVars.image.height; y++) {
-              const worldX = imageVars.positionX + (x / imageVars.image.width) * imageVars.width
-              const worldY = imageVars.positionY + (y / imageVars.image.height) * imageVars.height
+          const imgWidth = imageVars.image.width * imageVars.scale
+          const imgHeight = imageVars.image.height * imageVars.scale 
+          for (let x = 0; x < imgWidth; x++) {
+            for (let y = 0; y < imgHeight; y++) {
+              const worldX = imageVars.positionX + x * imageVars.scale
+              const worldY = imageVars.positionY + y * imageVars.scale
               if (worldX < x1 || worldX > x2 || worldY < y1 || worldY > y2) continue
               const color = getColor(x, y)
               let area = layer.areas.find(a => a.name === color)
@@ -578,12 +573,11 @@ function buildTools({
                 area = new Area(null, color, layer, color)
                 layer.areas.push(area)
               }
-              const bound = { minX: worldX, minY: worldY, maxX: worldX + xSize, maxY: worldY + ySize }
-              quadtree.drawRect(worldX, worldY, worldX + xSize, worldY + ySize, area.id, undefined, bound)
-              console.log(x, y, worldX, worldY, color)
+              const bound = { minX: worldX, minY: worldY, maxX: worldX + imageVars.scale, maxY: worldY + imageVars.scale }
+              // quadtree.drawRect(worldX, worldY, worldX + imageVars.scale, worldY + imageVars.scale, area.id, undefined, bound)
+              sendMessage(`RECT:${layer.id}:${bound.minX},${bound.minY}:${bound.maxX},${bound.maxY}:${area.id}`)
             }
           }
-          updateCanvas()
         }
       },
       onmousedown: (event) => {
@@ -591,8 +585,6 @@ function buildTools({
           const rect = ensureCanvasRect()
           imageVars.positionX = camera.toWorldX(event.clientX - (rect ? rect.left : 0))
           imageVars.positionY = camera.toWorldY(event.clientY - (rect ? rect.top : 0))
-          imageVars.width = 1;
-          imageVars.height = 1;
           imageVars.phase = 'positioning'
           updateCanvas()
         }
@@ -609,8 +601,8 @@ function buildTools({
         if (!rect) return
         const x = camera.toScreenX(imageVars.positionX)
         const y = camera.toScreenY(imageVars.positionY)
-        const width = imageVars.width * camera.zoom
-        const height = imageVars.height * camera.zoom
+        const width = imageVars.image.width * camera.zoom * imageVars.scale
+        const height = imageVars.image.height * camera.zoom * imageVars.scale
         ctx.strokeStyle = 'blue'
         ctx.lineWidth = 2
         ctx.strokeRect(x, y, width, height)
@@ -619,8 +611,11 @@ function buildTools({
       onmousemove: (event) => {
         if (imageVars.phase === 'positioning') {
           const rect = ensureCanvasRect()
-          imageVars.width = Math.max(1, camera.toWorldX(event.clientX - (rect ? rect.left : 0)) - imageVars.positionX)
-          imageVars.height = Math.max(1, camera.toWorldY(event.clientY - (rect ? rect.top : 0)) - imageVars.positionY)
+          if (!rect) return
+          const mouseX = event.clientX - rect.left
+          const mouseY = event.clientY - rect.top
+          imageVars.scale = (camera.toWorldX(mouseX) - imageVars.positionX) / imageVars.image.width
+          imageVars.scale = Math.max(0, imageVars.scale)
           updateCanvas()
         }
 
@@ -632,35 +627,18 @@ function buildTools({
           const y = camera.toScreenY(imageVars.positionY)
           const mouseX = event.clientX - rect.left
           const mouseY = event.clientY - rect.top
-          const width = imageVars.width * camera.zoom
-          const height = imageVars.height * camera.zoom
+          const width = imageVars.image.width * camera.zoom * imageVars.scale
+          const height = imageVars.image.height * camera.zoom * imageVars.scale
 
           const edgeSize = 10
-          if (mouseX >= x - edgeSize && mouseX <= x + edgeSize) {
-            if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
-              document.body.style.cursor = 'nwse-resize'
-              imageVars.nearestEdge = 'top-left'
-            } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
-              document.body.style.cursor = 'nesw-resize'
-              imageVars.nearestEdge = 'bottom-left'
-            } else if (mouseY >= y && mouseY <= y + height) {
-              document.body.style.cursor = 'ew-resize'
-              imageVars.nearestEdge = 'left'
-            }
-          } else if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize) {
-            if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
-              document.body.style.cursor = 'nesw-resize'
-              imageVars.nearestEdge = 'top-right'
-            } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+          if (mouseX >= x + width - edgeSize && mouseX <= x + width + edgeSize) {
+            if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
               document.body.style.cursor = 'nwse-resize'
               imageVars.nearestEdge = 'bottom-right'
             } else if (mouseY >= y && mouseY <= y + height) {
               document.body.style.cursor = 'ew-resize'
               imageVars.nearestEdge = 'right'
             }
-          } else if (mouseY >= y - edgeSize && mouseY <= y + edgeSize && mouseX >= x && mouseX <= x + width) {
-            document.body.style.cursor = 'ns-resize'
-            imageVars.nearestEdge = 'top'
           } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize && mouseX >= x && mouseX <= x + width) {
             document.body.style.cursor = 'ns-resize'
             imageVars.nearestEdge = 'bottom'
@@ -682,58 +660,26 @@ function buildTools({
           const mouseWorldX = camera.toWorldX(event.clientX - rect.left)
           const mouseWorldY = camera.toWorldY(event.clientY - rect.top)
           switch (imageVars.nearestEdge) {
-            case 'top-left':
-              imageVars.width += imageVars.positionX - mouseWorldX
-              imageVars.width = Math.max(1, imageVars.width)
-              imageVars.height += imageVars.positionY - mouseWorldY
-              imageVars.height = Math.max(1, imageVars.height)
-              imageVars.positionX = mouseWorldX
-              imageVars.positionY = mouseWorldY
-              break
-            case 'top-right':
-              imageVars.width = mouseWorldX - imageVars.positionX
-              imageVars.height += imageVars.positionY - mouseWorldY
-              imageVars.height = Math.max(1, imageVars.height)
-              imageVars.positionY = mouseWorldY
-              break
-            case 'bottom-left':
-              imageVars.width += imageVars.positionX - mouseWorldX
-              imageVars.width = Math.max(1, imageVars.width)
-              imageVars.height = mouseWorldY - imageVars.positionY
-              imageVars.height = Math.max(1, imageVars.height)
-              imageVars.positionX = mouseWorldX
-              break
             case 'bottom-right':
-              imageVars.width = mouseWorldX - imageVars.positionX
-              imageVars.width = Math.max(1, imageVars.width)
-              imageVars.height = mouseWorldY - imageVars.positionY
-              imageVars.height = Math.max(1, imageVars.height)
-              break
-            case 'left':
-              imageVars.width += imageVars.positionX - mouseWorldX
-              imageVars.width = Math.max(1, imageVars.width)
-              imageVars.positionX = mouseWorldX
-              break
             case 'right':
-              imageVars.width = mouseWorldX - imageVars.positionX
-              imageVars.width = Math.max(1, imageVars.width)
-              break
-            case 'top':
-              imageVars.height += imageVars.positionY - mouseWorldY
-              imageVars.height = Math.max(1, imageVars.height)
-              imageVars.positionY = mouseWorldY
+              imageVars.scale = (mouseWorldX - imageVars.positionX) / imageVars.image.width
+              imageVars.scale = Math.max(0, imageVars.scale)
               break
             case 'bottom':
-              imageVars.height = mouseWorldY - imageVars.positionY
-              imageVars.height = Math.max(1, imageVars.height)
+              imageVars.scale = (mouseWorldY - imageVars.positionY) / imageVars.image.height
+              imageVars.scale = Math.max(0, imageVars.scale)
               break
             case 'whole':
-              const deltaX = mouseWorldX - imageVars.startX
-              const deltaY = mouseWorldY - imageVars.startY
-              imageVars.positionX += deltaX
-              imageVars.positionY += deltaY
-              imageVars.startX = mouseWorldX
-              imageVars.startY = mouseWorldY
+              const currentWorldX = camera.toWorldX(event.clientX - (rect ? rect.left : 0))
+              const currentWorldY = camera.toWorldY(event.clientY - (rect ? rect.top : 0))
+              const dx = currentWorldX - imageVars.startX
+              const dy = currentWorldY - imageVars.startY
+              imageVars.positionX += dx
+              imageVars.positionY += dy
+              imageVars.startX = currentWorldX
+              imageVars.startY = currentWorldY
+              break
+            default:
               break
           }
 
