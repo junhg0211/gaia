@@ -90,7 +90,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  const LINE_RE = /^LINE:(\d+):([0-9\-]+),([0-9\-]+):([0-9\-]+),([0-9\-]+):(\d+),(\d+)$/;
+  const LINE_RE = /^LINE:(\d+):([0-9\-\.]+),([0-9\-\.]+):([0-9\-\.]+),([0-9\-\.]+):(\d+),([0-9\.]+)$/;
   const lineMatch = message.match(LINE_RE);
   if (lineMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -98,12 +98,12 @@ async function handleMessage(ws, message) {
       return;
     }
     const layerId = parseInt(lineMatch[1]);
-    const x1 = parseInt(lineMatch[2]);
-    const y1 = parseInt(lineMatch[3]);
-    const x2 = parseInt(lineMatch[4]);
-    const y2 = parseInt(lineMatch[5]);
+    const x1 = parseFloat(lineMatch[2]);
+    const y1 = parseFloat(lineMatch[3]);
+    const x2 = parseFloat(lineMatch[4]);
+    const y2 = parseFloat(lineMatch[5]);
     const color = parseInt(lineMatch[6]);
-    const brushSize = parseInt(lineMatch[7]);
+    const brushSize = parseFloat(lineMatch[7]);
 
     const layer = map.findLayer(layerId);
     if (!layer) {
