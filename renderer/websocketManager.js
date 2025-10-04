@@ -158,6 +158,43 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
+  const handleSetAreaNameMessage = (data) => {
+    const payload = data.slice(5)
+    const [areaIdStr, name] = payload.split(':')
+    const areaId = Number(areaIdStr)
+    const map = getMap?.()
+    if (!map) return
+    const area = map.findArea(areaId)
+    if (!area) return
+    area.name = name
+    bumpMapUpdate?.()
+  }
+
+  const handleSetAreaColorMessage = (data) => {
+    const payload = data.slice(5)
+    const [areaIdStr, color] = payload.split(':')
+    const areaId = Number(areaIdStr)
+    const map = getMap?.()
+    if (!map) return
+    const area = map.findArea(areaId)
+    if (!area) return
+    area.color = color
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
+
+  const handleSetLayerNameMessage = (data) => {
+    const payload = data.slice(5)
+    const [layerIdStr, name] = payload.split(':')
+    const layerId = Number(layerIdStr)
+    const map = getMap?.()
+    if (!map) return
+    const layer = map.findLayer(layerId)
+    if (!layer) return
+    layer.name = name
+    bumpMapUpdate?.()
+  }
+
   const handleErrorMessage = (data) => {
     const message = data.slice(4)
     addLogEntry?.(`Error from server: ${message}`)
@@ -184,6 +221,12 @@ export function createWebSocketManager({
       handlePolygonMessage(data)
     } else if (data.startsWith('DISCONNECT:')) {
       handleDisconnectMessage(data)
+    } else if (data.startsWith('SEAN:')) {
+      handleSetAreaNameMessage(data)
+    } else if (data.startsWith('SEAC:')) {
+      handleSetAreaColorMessage(data)
+    } else if (data.startsWith('SLNA:')) {
+      handleSetLayerNameMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
     }

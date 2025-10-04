@@ -7,14 +7,14 @@
   export let ws;
   export let selectedArea;
 
-  let color = "#ff0000";
-  let name = "new area";
+  let color = "#000000";
+  let name = "새 영역";
 
   async function addArea() {
     ws.send(`NEWA:${layer.id}:${name}:${color}`);
   }
 
-  let layerName = "new layer";
+  let layerName = "새 레이어";
 
   async function addLayer() {
     ws.send(`NEWL:${layer.id}:${layerName}`);
@@ -23,15 +23,20 @@
   async function deleteLayer() {
     ws.send(`DELL:${layer.id}`);
   }
+
+  function changeLayerName(event) {
+    const newName = event.target.value;
+    ws.send(`SELN:${layer.id}:${newName}`);
+  }
 </script>
 
 <div class="layer-container">
-  <div class="name">{layer.name}</div>
+  <div class="name">
+    <input type="text" bind:value={layer.name} on:change={changeLayerName} />
+  </div>
   <div>
-    <button on:click={deleteLayer}>레이어 삭제</button>
     <div class="add-area-inputs">
-      <input type="color" bind:value={color} />
-      <input type="text" bind:value={name} />
+      <button on:click={deleteLayer}>레이어 삭제</button>
       <button on:click={addArea}>영역 추가</button>
     </div>
     {#each layer.areas as area}
@@ -40,7 +45,6 @@
   </div>
   <div class="child-layers">
     <div class="add-layer-inputs">
-      <input type="text" bind:value={layerName} />
       <button on:click={addLayer}>레이어 추가</button>
     </div>
     {#each layer.children as child}

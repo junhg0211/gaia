@@ -227,6 +227,11 @@ async function handleMessage(ws, message) {
     }
     const areaId = parseInt(deleteAreaMatch[1]);
 
+    if (areaId === 0) {
+      ws.send('ERR Cannot delete root area');
+      return;
+    }
+
     const area = map.findArea(areaId);
     if (!area) {
       ws.send('ERR Invalid area ID');
@@ -246,6 +251,94 @@ async function handleMessage(ws, message) {
     ws.send(`OK`);
 
     const broadcastMessage = `DELA:${areaId}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const SETAREACOLOR_RE = /^SEAC:(\d+):#([0-9a-fA-F]{6})$/;
+  const setAreaColorMatch = message.match(SETAREACOLOR_RE);
+  if (setAreaColorMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const areaId = parseInt(setAreaColorMatch[1]);
+    const newColor = `#${setAreaColorMatch[2]}`;
+
+    if (areaId === 0) {
+      ws.send('ERR Cannot recolor root area');
+      return;
+    }
+
+    const area = map.findArea(areaId);
+    if (!area) {
+      ws.send('ERR Invalid area ID');
+      return;
+    }
+
+    area.color = newColor;
+    ws.send(`OK`);
+
+    const broadcastMessage = `SEAC:${areaId}:${newColor}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const SETLAYERNAME_RE = /^SELN:(\d+):(.+)$/;
+  const setLayerNameMatch = message.match(SETLAYERNAME_RE);
+  if (setLayerNameMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(setLayerNameMatch[1]);
+    const newName = setLayerNameMatch[2].trim();
+
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    layer.name = newName;
+    ws.send(`OK`);
+
+    const broadcastMessage = `SELN:${layerId}:${newName}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const SETAREANAME_RE = /^SEAN:(\d+):(.+)$/;
+  const setAreaNameMatch = message.match(SETAREANAME_RE);
+  if (setAreaNameMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const areaId = parseInt(setAreaNameMatch[1]);
+    const newName = setAreaNameMatch[2].trim();
+
+    if (areaId === 0) {
+      ws.send('ERR Cannot rename root area');
+      return;
+    }
+
+    const area = map.findArea(areaId);
+    if (!area) {
+      ws.send('ERR Invalid area ID');
+      return;
+    }
+
+    area.name = newName;
+    ws.send(`OK`);
+
+    const broadcastMessage = `SEAN:${areaId}:${newName}`;
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
     }
