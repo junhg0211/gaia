@@ -221,12 +221,15 @@ function handleMessage(ws, message) {
       ws.send('ERR Invalid area ID');
       return;
     }
-    
+
     if (!area.parent) {
       ws.send('ERR Area has no parent layer');
       return;
     }
-    const layer = map.findLayer(area.parent);
+    if (area.parent instanceof Number) {
+      area.parent = map.findLayer(area.parent);
+    }
+    const layer = area.parent;
     if (!layer) {
       ws.send('ERR Parent layer not found');
       return;
@@ -240,9 +243,92 @@ function handleMessage(ws, message) {
       clientWs.send(broadcastMessage);
     }
     return;
-  } 
+  }
 
-  ws.send(`ERR Unknown command: ${message}`);
+  // fillrect
+  const RECT_RE = /^RECT:(\d+):([0-9\-]+),([0-9\-]+):([0-9\-]+),([0-9\-]+):(\d+)$/;
+  const rectMatch = message.match(RECT_RE);
+  if (rectMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(rectMatch[1]);
+    const x1 = parseInt(rectMatch[2]);
+    const y1 = parseInt(rectMatch[3]);
+    const x2 = parseInt(rectMatch[4]);
+    const y2 = parseInt(rectMatch[5]);
+    const color = parseInt(rectMatch[6]);
+
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    layer.expandTo(x1, y1);
+    layer.expandTo(x2, y2);
+    const [px, py] = layer.pos ?? [0, 0];
+    const [sx, sy] = layer.size ?? [1, 1];
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
+
+    layer.quadtree.drawRect(x1, y1, x2, y2, color, undefined, bounds);
+
+    const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    ws.send('OK');
+
+    return;
+  }
+
+  const FILLPOLY_RE = /^POLY:(\d+):((?:[0-9\-]+,[0-9\-]+,?)+):(\d+)$/;
+  const fillPolyMatch = message.match(FILLPOLY_RE);
+  if (fillPolyMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(fillPolyMatch[1]);
+    const pointsStr = fillPolyMatch[2];
+    const color = parseInt(fillPolyMatch[3]);
+
+    const points = pointsStr.split(',').map(v => parseInt(v));
+    if (points.length < 6 || points.length % 2 !== 0) {
+      ws.send('ERR Invalid polygon points');
+      return;
+    }
+    const newPoints = [];
+    for (let i = 0; i < points.length; i += 2) {
+      newPoints.push([points[i], points[i + 1]]);
+    }
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    for (const [x, y] of newPoints) {
+      layer.expandTo(x, y);
+    }
+    const [px, py] = layer.pos ?? [0, 0];
+    const [sx, sy] = layer.size ?? [1, 1];
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
+
+    layer.quadtree.drawPolygon(newPoints, color, undefined, bounds);
+
+    const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    ws.send('OK');
+
+    return;
+  }
+
+  // If no command matched
+  ws.send(`ERR:Unknown command: ${message}`);
 }
 
 console.log(`🌐 WebSocket LAN server running on ws://localhost:${PORT}`);

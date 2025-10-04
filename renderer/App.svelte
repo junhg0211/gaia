@@ -105,8 +105,30 @@
             areaId, undefined, bounds)
           updateCanvas()
         }
+      } else if (event.data.startsWith('POLY:')) {
+        const mapData = event.data.slice(5)
+        let [ layerId, pointsStr, areaId ] = mapData.split(':')
+        const points = pointsStr.split(',').map(v => parseInt(v))
+        const layer = map.findLayer(parseInt(layerId))
+        areaId = parseInt(areaId)
+        if (layer) {
+          for (let i = 0; i < points.length; i += 2) {
+            layer.expandTo(points[i], points[i+1])
+          }
+          const [px, py] = layer.pos ?? [0, 0]
+          const [sx, sy] = layer.size ?? [1, 1]
+          const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+          const newPoints = []
+          for (let i = 0; i < points.length; i += 2) {
+            newPoints.push([points[i], points[i+1]])
+          }
+          layer.quadtree.drawPolygon(newPoints, areaId, undefined, bounds)
+          updateCanvas()
+        }
+      } else if (event.data.startsWith('ERR:')) {
+        const errorMsg = event.data.slice(4)
+        addLogEntry(`Error from server: ${errorMsg}`)
       }
-
     }
     ws.onclose = () => {
       connected = false
@@ -505,6 +527,65 @@
           ctx.strokeStyle = 'blue'
           ctx.lineWidth = 2
           ctx.strokeRect(x, y, width, height)
+        }
+      }
+    },
+    {
+      name: "다각형",
+      icon: "hexagon",
+      hotkey: "p",
+      vars: {
+        brushing: false,
+        points: []
+      },
+      onmouseup: (e) => {
+        if (e.button === 0) {
+          if (!nowTool.vars.brushing) {
+            nowTool.vars.points = []
+            nowTool.vars.brushing = true
+          }
+          nowTool.vars.points.push({ x: e.clientX, y: e.clientY })
+          updateCanvas()
+        } else if (e.button === 2) {
+          if (nowTool.vars.brushing && nowTool.vars.points.length >= 3) {
+            nowTool.vars.brushing = false
+            if (!map) return
+            const area = selectedArea
+            if (area) {
+              const worldPoints = nowTool.vars.points.map(p => {
+                return parseInt(camera.toWorldX(p.x - canvas.getBoundingClientRect().left)) + ',' + parseInt(camera.toWorldY(p.y - canvas.getBoundingClientRect().top))
+              }).join(',')
+              ws.send(`POLY:${area.parent.id}:${worldPoints}:${area.id}`)
+              updateCanvas()
+            }
+          }
+        }
+      },
+      onmousemove: (e) => {
+        if (!nowTool.vars.brushing) return;
+        nowTool.vars.toX = e.clientX
+        nowTool.vars.toY = e.clientY
+        updateCanvas()
+      },
+      render: (ctx) => {
+        if (nowTool.vars.brushing && nowTool.vars.points.length > 0) {
+          const rect = canvas.getBoundingClientRect()
+          ctx.strokeStyle = 'blue'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(nowTool.vars.points[0].x - rect.left, nowTool.vars.points[0].y - rect.top)
+          for (let i = 1; i < nowTool.vars.points.length; i++) {
+            ctx.lineTo(nowTool.vars.points[i].x - rect.left, nowTool.vars.points[i].y - rect.top)
+          }
+          ctx.lineTo(nowTool.vars.toX - rect.left, nowTool.vars.toY - rect.top)
+          ctx.stroke()
+
+          for (const point of nowTool.vars.points) {
+            ctx.fillStyle = 'blue'
+            ctx.beginPath()
+            ctx.arc(point.x - rect.left, point.y - rect.top, 5, 0, 2 * Math.PI)
+            ctx.fill()
+          }
         }
       }
     },

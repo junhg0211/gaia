@@ -494,6 +494,16 @@ class Quadtree {
     this.children.forEach(child => child.changeValue(oldValue, newValue));
     this.tryMerge();
   }
+
+  drawRect(minX, minY, maxX, maxY, value, depth = 11, bounds) {
+    const points = [
+      [minX, minY],
+      [maxX, minY],
+      [maxX, maxY],
+      [minX, maxY],
+    ];
+    return this.drawPolygon(points, value, depth, bounds);
+  }
 }
 
 function serializeQuadtree(node) {
