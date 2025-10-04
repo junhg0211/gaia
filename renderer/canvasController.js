@@ -307,7 +307,8 @@ function buildTools({
         const start = toWorldPoint(brushVars.previousX, brushVars.previousY)
         const end = toWorldPoint(event.clientX, event.clientY)
         if (!start || !end) return
-        sendMessage(`LINE:${selectedArea.parent.id}:${start.x},${start.y}:${end.x},${end.y}:${selectedArea.id},${brushVars.width}`)
+        const width = brushVars.width / camera.zoom
+        sendMessage(`LINE:${selectedArea.parent.id}:${start.x},${start.y}:${end.x},${end.y}:${selectedArea.id},${width}`)
         brushVars.previousX = event.clientX
         brushVars.previousY = event.clientY
         updateCanvas()
@@ -323,7 +324,6 @@ function buildTools({
         } else {
           brushVars.width = Math.max(brushVars.width - 1, 1)
         }
-        updateCanvas()
       },
     },
     {
