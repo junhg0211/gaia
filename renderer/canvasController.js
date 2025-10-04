@@ -728,6 +728,7 @@ export function createCanvasController(options) {
   let canvas = null
   let workspace = null
   let ctx = null
+  let spaceKeyPressed = false
 
   const panState = {
     active: false,
@@ -940,7 +941,7 @@ export function createCanvasController(options) {
   function mouseMoveHandler(event) {
     if (!withinCanvas(event)) return
 
-    if (panState.active) {
+    if (panState.active || spaceKeyPressed) {
       const deltaX = (event.clientX - panState.startX) / camera.zoom
       const deltaY = (event.clientY - panState.startY) / camera.zoom
       camera.x = panState.initialCameraX - deltaX
@@ -1007,6 +1008,13 @@ export function createCanvasController(options) {
       return
     }
 
+    if (event.key === ' ') {
+      if (!spaceKeyPressed) {
+        spaceKeyPressed = true
+        document.body.style.cursor = 'grab'
+      }
+    }
+
     const activeTool = getCurrentTool?.()
     if (activeTool && activeTool.onkeydown) {
       activeTool.onkeydown(event)
@@ -1017,6 +1025,13 @@ export function createCanvasController(options) {
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
       return
     }
+
+    if (event.key === ' ') {
+      spaceKeyPressed = false
+      document.body.style.cursor = 'default'
+      panState.active = false
+    }
+
     const activeTool = getCurrentTool?.()
     if (activeTool && activeTool.onkeyup) {
       activeTool.onkeyup(event)
