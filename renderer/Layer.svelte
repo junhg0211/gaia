@@ -28,12 +28,16 @@
     const newName = event.target.value;
     ws.send(`SELN:${layer.id}:${newName}`);
   }
+
+  let unfold = true;
 </script>
 
 <div class="layer-container">
   <div class="name">
+    <input type="checkbox" bind:checked={unfold} />
     <input type="text" bind:value={layer.name} on:change={changeLayerName} />
   </div>
+  {#if unfold}
   <div>
     <div class="add-area-inputs">
       <button on:click={deleteLayer}>레이어 삭제</button>
@@ -51,6 +55,7 @@
     <Layer {ws} {selectedArea} layer={child} on:areaselect />
     {/each}
   </div>
+  {/if}
 </div>
 
 <style>
