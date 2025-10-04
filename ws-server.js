@@ -107,7 +107,6 @@ function handleMessage(ws, message) {
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
     layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, undefined, bounds);
-    console.log(layer.quadtree);
 
     const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}`;
     for (const [clientWs] of clients) {
@@ -172,6 +171,76 @@ function handleMessage(ws, message) {
     }
     return;
   }
+
+  const DELETELAYER_RE = /^DELL:(\d+)$/;
+  const deleteLayerMatch = message.match(DELETELAYER_RE);
+  if (deleteLayerMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(deleteLayerMatch[1]);
+
+    if (layerId === map.layer.id) {
+      ws.send('ERR Cannot delete root layer');
+      return;
+    }
+
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    if (!layer.parent) {
+      ws.send('ERR Layer has no parent');
+      return;
+    }
+
+    layer.parent.children = layer.parent.children.filter(child => child.id !== layerId);
+    ws.send(`OK`);
+
+    const broadcastMessage = `DELL:${layerId}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const DELETEAREA_RE = /^DELA:(\d+)$/;
+  const deleteAreaMatch = message.match(DELETEAREA_RE);
+  if (deleteAreaMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const areaId = parseInt(deleteAreaMatch[1]);
+
+    const area = map.findArea(areaId);
+    if (!area) {
+      ws.send('ERR Invalid area ID');
+      return;
+    }
+    
+    if (!area.parent) {
+      ws.send('ERR Area has no parent layer');
+      return;
+    }
+    const layer = map.findLayer(area.parent);
+    if (!layer) {
+      ws.send('ERR Parent layer not found');
+      return;
+    }
+
+    layer.removeArea(areaId);
+    ws.send(`OK`);
+
+    const broadcastMessage = `DELA:${areaId}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  } 
 
   ws.send(`ERR Unknown command: ${message}`);
 }

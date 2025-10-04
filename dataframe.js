@@ -154,6 +154,20 @@ class Map {
     this.layer = layer;
   }
 
+  findArea(id) {
+    const searchArea = (layer, id) => {
+      for (const area of layer.areas) {
+        if (area.id === id) return area;
+      }
+      for (const child of layer.children) {
+        const found = searchArea(child, id);
+        if (found) return found;
+      }
+      return null;
+    };
+    return searchArea(this.layer, id);
+  }
+
   findLayer(id) {
     const searchLayer = (layer, id) => {
       if (layer.id === id) return layer;
@@ -274,6 +288,13 @@ class Layer {
 
     this.expandTo(x, y);
   }
+
+  removeArea(areaId) {
+    if (areaId === 0) return;
+
+    this.quadtree.changeValue(areaId, 0);
+    this.areas = this.areas.filter(area => area.id !== areaId);
+  }
 }
 
 let areaHighestId = 0;
@@ -289,7 +310,6 @@ function setAreaHighestId(id) {
 }
 
 class Area {
-
   constructor(id, color, parent, name) {
     this.id = id;
     this.color = color;
@@ -461,6 +481,18 @@ class Quadtree {
         this.children[i] = new Quadtree(0, this);
       }
     }
+  }
+
+  changeValue(oldValue, newValue) {
+    if (this.isLeaf()) {
+      if (this.value === oldValue) {
+        this.set(newValue);
+      }
+      return;
+    }
+
+    this.children.forEach(child => child.changeValue(oldValue, newValue));
+    this.tryMerge();
   }
 }
 

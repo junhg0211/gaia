@@ -67,6 +67,26 @@
           console.log(layer)
           updateCanvas()
         }
+      } else if (event.data.startsWith('DELL:')) {
+        const mapData = event.data.slice(5)
+        const layerId = parseInt(mapData)
+        const layer = map.findLayer(layerId)
+        if (layer && layer.parent) {
+          const index = layer.parent.children.indexOf(layer)
+          if (index !== -1) {
+            layer.parent.children.splice(index, 1)
+            mapUpdate = (mapUpdate + 1) % 1000000
+          }
+        }
+      } else if (event.data.startsWith('DELA:')) {
+        const mapData = event.data.slice(5)
+        const areaId = parseInt(mapData)
+        const area = map.findArea(areaId)
+        if (area && area.parent) {
+          const index = area.parent.removeArea(areaId)
+          mapUpdate = (mapUpdate + 1) % 1000000
+          updateCanvas()
+        }
       }
 
     }

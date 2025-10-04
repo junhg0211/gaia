@@ -18,10 +18,17 @@
   async function addLayer() {
     ws.send(`NEWL:${layer.id}:${layerName}`);
   }
+
+  async function deleteLayer() {
+    ws.send(`DELL:${layer.id}`);
+  }
 </script>
 
 <div class="layer-container">
   <div>{layer.name}</div>
+  <div>
+    <button on:click={deleteLayer}>레이어 삭제</button>
+  </div>
   <div>
     <button on:click={addArea}>영역 추가</button>
     <div>
@@ -29,7 +36,7 @@
       <input type="text" bind:value={name} />
     </div>
     {#each layer.areas as area}
-    <Area {area} on:areaselect />
+    <Area {ws} {area} on:areaselect />
     {/each}
   </div>
   <div>
