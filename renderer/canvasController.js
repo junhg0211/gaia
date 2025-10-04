@@ -77,7 +77,10 @@ function buildTools({
     phase: 'idle', // 'idle', 'positioning', 'resizing'
                    // 'resize-top', 'resize-bottom', 'resize-left', 'resize-right',
                    // 'resize-top-left', 'resize-top-right', 'resize-bottom-left', 'resize-bottom-right'
+                   // 'resize-whole'
     nearestEdge: null,
+    startX: 0,
+    startY: 0,
   }
 
   const tools = [
@@ -558,7 +561,7 @@ function buildTools({
             } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
               document.body.style.cursor = 'nesw-resize'
               imageVars.nearestEdge = 'bottom-left'
-            } else {
+            } else if (mouseY >= y && mouseY <= y + height) {
               document.body.style.cursor = 'ew-resize'
               imageVars.nearestEdge = 'left'
             }
@@ -569,16 +572,22 @@ function buildTools({
             } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
               document.body.style.cursor = 'nwse-resize'
               imageVars.nearestEdge = 'bottom-right'
-            } else {
+            } else if (mouseY >= y && mouseY <= y + height) {
               document.body.style.cursor = 'ew-resize'
               imageVars.nearestEdge = 'right'
             }
-          } else if (mouseY >= y - edgeSize && mouseY <= y + edgeSize) {
+          } else if (mouseY >= y - edgeSize && mouseY <= y + edgeSize && mouseX >= x && mouseX <= x + width) {
             document.body.style.cursor = 'ns-resize'
             imageVars.nearestEdge = 'top'
-          } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize) {
+          } else if (mouseY >= y + height - edgeSize && mouseY <= y + height + edgeSize && mouseX >= x && mouseX <= x + width) {
             document.body.style.cursor = 'ns-resize'
             imageVars.nearestEdge = 'bottom'
+          } else if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
+            document.body.style.cursor = 'move'
+            imageVars.nearestEdge = 'whole'
+            const rect = ensureCanvasRect()
+            imageVars.startX = camera.toWorldX(event.clientX - (rect ? rect.left : 0))
+            imageVars.startY = camera.toWorldY(event.clientY - (rect ? rect.top : 0))
           } else {
             document.body.style.cursor = 'default'
             imageVars.nearestEdge = null
@@ -635,6 +644,14 @@ function buildTools({
             case 'bottom':
               imageVars.height = mouseWorldY - imageVars.positionY
               imageVars.height = Math.max(1, imageVars.height)
+              break
+            case 'whole':
+              const deltaX = mouseWorldX - imageVars.startX
+              const deltaY = mouseWorldY - imageVars.startY
+              imageVars.positionX += deltaX
+              imageVars.positionY += deltaY
+              imageVars.startX = mouseWorldX
+              imageVars.startY = mouseWorldY
               break
           }
 
