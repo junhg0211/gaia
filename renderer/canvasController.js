@@ -607,6 +607,15 @@ function buildTools({
         ctx.lineWidth = 2
         ctx.strokeRect(x, y, width, height)
         ctx.drawImage(imageVars.image, x, y, width, height)
+        // text: position and scale
+        ctx.font = '14px Arial'
+        ctx.fillStyle = 'black'
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+        const posText = `(${imageVars.positionX.toFixed(1)}, ${imageVars.positionY.toFixed(1)})`
+        const widthText = `W: ${(imageVars.image.width * imageVars.scale).toFixed(1)}`
+        const heightText = `H: ${(imageVars.image.height * imageVars.scale).toFixed(1)}`
+        ctx.fillText(`${posText} ${widthText} ${heightText}`, x + 4, y + height + 4)
       },
       onmousemove: (event) => {
         if (imageVars.phase === 'positioning') {
