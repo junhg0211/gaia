@@ -9,14 +9,26 @@ const PORT = 48829;
 const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
 
 let map;
-if (fs.existsSync('map.json')) {
-  map = loadMapFromFile('map.json');
+if (fs.existsSync('map.gaia')) {
+  map = loadMapFromFile('map.gaia');
 } else {
   map = new Map("Gaia", new Layer(null, new Quadtree(0), null, [0, 0], [1, 1], "Root Layer"));
 }
 
 const clients = new Set();
-function handleMessage(ws, message) {
+let saveCounter = 50;
+async function handleMessage(ws, message) {
+  saveCounter--;
+  if (saveCounter <= 0) {
+    saveCounter = 50;
+    fs.writeFile('map.gaia', JSON.stringify(serializeMap(map)), (err) => {
+      if (err) {
+        console.error('Auto-save error:', err);
+      }
+    });
+    console.log('💾 Map auto-saved');
+  }
+
   const ECHO_RE = /^ECHO:(.*)$/;
   const echoMatch = message.match(ECHO_RE);
   if (echoMatch) {
