@@ -480,36 +480,6 @@ export function createCanvasController(options) {
       map.draw(ctx, canvas, camera)
     }
 
-    const gridLength = Math.pow(2, Math.floor(Math.log2(100 / camera.zoom)))
-    const gridSize = gridLength * camera.zoom
-    ctx.strokeStyle = '#ccc'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.font = '10px Arial'
-    ctx.fillStyle = 'black'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    const startX = camera.toScreenX(0) % gridSize
-    const startY = camera.toScreenY(0) % gridSize
-    for (let x = startX; x < canvas.width; x += gridSize) {
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, canvas.height)
-      ctx.fillText(Math.round(camera.toWorldX(x)), x + 2, 2)
-    }
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'middle'
-    for (let y = startY; y < canvas.height; y += gridSize) {
-      ctx.moveTo(0, y)
-      ctx.lineTo(canvas.width, y)
-      ctx.fillText(Math.round(camera.toWorldY(y)), canvas.width - 2, y - 2)
-    }
-    ctx.stroke()
-
-    // 카메라 줌 레벨 따라서 축척 그리기
-    // 1픽셀은 1미터
-    // 화면 왼쪽 아래에 1 or 2 or 5 단위로 눈금 표시
-    // 눈금 하나의 길이는 100-200 픽셀 사이
-    const units = [1, 2, 5]
     let unit = 0.1
     while (unit * camera.zoom < 60) {
       if (unit / Math.pow(10, Math.floor(Math.log10(unit))) === 1) {
@@ -520,6 +490,46 @@ export function createCanvasController(options) {
         unit *= 2
       }
     }
+
+    const gridSize = unit * camera.zoom
+    ctx.strokeStyle = '#ccc'
+    ctx.lineWidth = 1
+    ctx.font = '10px Arial'
+    ctx.fillStyle = 'black'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    const startX = camera.toScreenX(0) % gridSize
+    const startY = camera.toScreenY(0) % gridSize
+    for (let x = startX; x < canvas.width; x += gridSize) {
+    ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, canvas.height)
+    ctx.stroke()
+      let label = Math.round(camera.toWorldX(x))
+      if (label > 0) {
+        label = `${label}E`
+      } else if (label < 0) {
+        label = `${-label}W`
+      }
+      ctx.fillText(label, x + 2, 2)
+    }
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    for (let y = startY; y < canvas.height; y += gridSize) {
+    ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(canvas.width, y)
+    ctx.stroke()
+      let label = Math.round(camera.toWorldY(y))
+      if (label > 0) {
+        label = `${label}N`
+      } else if (label < 0) {
+        label = `${-label}S`
+      }
+      ctx.fillText(label, canvas.width - 2, y)
+    }
+
+    // 카메라 줌 레벨 따라서 축척 그리기
     const repeats = Math.ceil(300 / (unit * camera.zoom))
 
     const scaleBarLength = unit * camera.zoom
