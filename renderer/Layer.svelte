@@ -15,21 +15,25 @@
   let name = "새 영역";
 
   async function addArea() {
+    ws.send('SNAP')
     ws.send(`NEWA:${layer.id}:${name}:${color}`);
   }
 
   let layerName = "새 레이어";
 
   async function addLayer() {
+    ws.send('SNAP')
     ws.send(`NEWL:${layer.id}:${layerName}`);
   }
 
   async function deleteLayer() {
+    ws.send('SNAP')
     ws.send(`DELL:${layer.id}`);
   }
 
   function changeLayerName(event) {
     const newName = event.target.value;
+    ws.send('SNAP')
     ws.send(`SELN:${layer.id}:${newName}`);
   }
 
@@ -37,11 +41,13 @@
 
   function upLayer() {
     const index = layer.parent.children.indexOf(layer) - 1;
+    ws.send('SNAP')
     ws.send(`LYOD:${layer.id}:${index}`);
   }
 
   function downLayer() {
     const index = layer.parent.children.indexOf(layer) + 2;
+    ws.send('SNAP')
     ws.send(`LYOD:${layer.id}:${index}`);
   }
 

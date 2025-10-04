@@ -14,16 +14,19 @@
   }
 
   async function deleteArea() {
+    ws.send('SNAP')
     ws.send(`DELA:${area.id}`);
   }
 
   function setAreaName(event) {
     const newName = event.target.value;
+    ws.send('SNAP')
     ws.send(`SEAN:${area.id}:${newName}`);
   }
 
   function setAreaColor(event) {
     const newColor = event.target.value;
+    ws.send('SNAP')
     ws.send(`SEAC:${area.id}:${newColor}`);
   }
 
