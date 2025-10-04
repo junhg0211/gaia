@@ -64,7 +64,6 @@
           const [sx, sy] = layer.size ?? [1, 1]
           const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
           layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, undefined, bounds)
-          console.log(layer)
           updateCanvas()
         }
       } else if (event.data.startsWith('DELL:')) {
@@ -85,6 +84,25 @@
         if (area && area.parent) {
           const index = area.parent.removeArea(areaId)
           mapUpdate = (mapUpdate + 1) % 1000000
+          updateCanvas()
+        }
+      } else if (event.data.startsWith('RECT:')) {
+        const mapData = event.data.slice(5)
+        let [ layerId, from, to, areaId ] = mapData.split(':')
+        const [ x1, y1 ] = from.split(',').map(v => parseInt(v))
+        const [ x2, y2 ] = to.split(',').map(v => parseInt(v))
+        const layer = map.findLayer(parseInt(layerId))
+        areaId = parseInt(areaId)
+        if (layer) {
+          layer.expandTo(x1, y1)
+          layer.expandTo(x2, y2)
+          const [px, py] = layer.pos ?? [0, 0]
+          const [sx, sy] = layer.size ?? [1, 1]
+          const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+          layer.quadtree.drawRect(
+            Math.min(x1, x2), Math.min(y1, y2),
+            Math.max(x1, x2), Math.max(y1, y2),
+            areaId, undefined, bounds)
           updateCanvas()
         }
       }
@@ -436,6 +454,59 @@
       },
       icon: "type-underline",
       hotkey: "l",
+    },
+    {
+      name: "사각형",
+      icon: "square",
+      hotkey: "m",
+      vars: {
+        brushing: false,
+        x: 0, y: 0,
+        toX: 0, toY: 0
+      },
+      onmousedown: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.x = e.clientX
+          nowTool.vars.y = e.clientY
+          nowTool.vars.brushing = true
+        }
+      },
+      onmousemove: (e) => {
+        if (e.button !== 0) return
+        if (!nowTool.vars.brushing) return;
+        nowTool.vars.toX = e.clientX
+        nowTool.vars.toY = e.clientY
+        updateCanvas()
+      },
+      onmouseup: (e) => {
+        if (e.button === 0) {
+          nowTool.vars.brushing = false
+          if (!map) return
+          const startX = parseInt(camera.toWorldX(nowTool.vars.x - canvas.getBoundingClientRect().left))
+          const startY = parseInt(camera.toWorldY(nowTool.vars.y - canvas.getBoundingClientRect().top))
+          const endX = parseInt(camera.toWorldX(nowTool.vars.toX - canvas.getBoundingClientRect().left))
+          const endY = parseInt(camera.toWorldY(nowTool.vars.toY - canvas.getBoundingClientRect().top))
+          const [x1, x2] = startX < endX ? [startX, endX] : [endX, startX]
+          const [y1, y2] = startY < endY ? [startY, endY] : [endY, startY]
+          const area = selectedArea
+          if (area) {
+            ws.send(`RECT:${area.parent.id}:${x1},${y1}:${x2},${y2}:${area.id}`)
+            updateCanvas()
+          }
+        }
+      },
+      render: (ctx) => {
+        if (nowTool.vars.brushing) {
+          const rect = canvas.getBoundingClientRect()
+          const x = Math.min(nowTool.vars.x, nowTool.vars.toX) - rect.left
+          const y = Math.min(nowTool.vars.y, nowTool.vars.toY) - rect.top
+          const width = Math.abs(nowTool.vars.toX - nowTool.vars.x)
+          const height = Math.abs(nowTool.vars.toY - nowTool.vars.y)
+          ctx.strokeStyle = 'blue'
+          ctx.lineWidth = 2
+          ctx.strokeRect(x, y, width, height)
+        }
+      }
     },
   ]
   let nowTool = tools[0]
