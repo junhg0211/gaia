@@ -62,6 +62,8 @@ function buildTools({
     width: 10,
     previousX: 0,
     previousY: 0,
+    mouseX: 0,
+    mouseY: 0,
   }
 
   const lassoVars = {
@@ -314,10 +316,16 @@ function buildTools({
           brushVars.brushing = true
           brushVars.previousX = event.clientX
           brushVars.previousY = event.clientY
+          brushVars.mouseX = event.clientX
+          brushVars.mouseY = event.clientY
           sendMessage("SNAP");
         }
       },
       onmousemove: (event) => {
+        brushVars.mouseX = event.clientX
+        brushVars.mouseY = event.clientY
+        updateCanvas()
+
         if (event.button !== 0) return
         if (!brushVars.brushing) return
         const selectedArea = getSelectedArea()
@@ -338,12 +346,26 @@ function buildTools({
           brushVars.brushing = false
         }
       },
-      onwheel: (event) => {
-        if (event.deltaY < 0) {
-          brushVars.width = Math.min(brushVars.width + 1, 100)
-        } else {
-          brushVars.width = Math.max(brushVars.width - 1, 1)
+      onkeydown: (event) => {
+        if (event.key === '[') {
+          brushVars.width = Math.max(1, brushVars.width - 1)
+          updateCanvas()
+        } else if (event.key === ']') {
+          brushVars.width = Math.min(100, brushVars.width + 1)
+          updateCanvas()
         }
+      },
+      render: (ctx) => {
+        const rect = ensureCanvasRect()
+        if (!rect) return
+        const x = brushVars.mouseX - rect.left
+        const y = brushVars.mouseY - rect.top
+        console.log(x, y, brushVars.width, camera.zoom)
+        ctx.strokeStyle = 'black'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.arc(x, y, brushVars.width / 2, 0, Math.PI * 2)
+        ctx.stroke()
       },
     },
     {
