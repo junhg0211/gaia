@@ -30,7 +30,7 @@
   $: isSelected = selectedArea && selectedArea.id === area.id && selectedArea.parent === area.parent;
 </script>
 
-<button class="area-container" class:selected={isSelected } on:click={selectArea}>
+<button class="area-container" class:selected={isSelected} on:click={selectArea}>
   <div class="area-info">
     <input style="color" color={area.color} type="color" value={area.color} disabled={area.id === 0} on:change={setAreaColor} />
     <input type="text" value={area.name} on:change={setAreaName} disabled={area.id === 0} />

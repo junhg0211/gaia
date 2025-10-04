@@ -1,4 +1,5 @@
 import { tick } from 'svelte'
+import { Area } from '../dataframe.js'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
@@ -503,6 +504,56 @@ function buildTools({
           reader.readAsDataURL(file)
         }
         input.click()
+      },
+      onend: () => {
+        if (imageVars.phase === 'resizing' && imageVars.image) {
+          imageVars.phase = 'idle'
+
+          const selectedArea = getSelectedArea()
+          const layer = selectedArea?.parent
+          const quadtree = layer?.quadtree
+          if (!layer || !quadtree) return
+          const x1 = imageVars.positionX
+          const y1 = imageVars.positionY
+          const x2 = imageVars.positionX + imageVars.width
+          const y2 = imageVars.positionY + imageVars.height
+          layer.expandTo(x1, y1)
+          layer.expandTo(x2, y2)
+
+          const c = document.createElement('canvas')
+          c.width = imageVars.image.width
+          c.height = imageVars.image.height
+          const ct = c.getContext('2d')
+          ct.imageSmoothingEnabled = false
+          ct.drawImage(imageVars.image, 0, 0)
+          const getColor = (x, y) => {
+            const imgData = ct.getImageData(
+              Math.trunc(x * (imageVars.image.width / imageVars.width)),
+              Math.trunc(y * (imageVars.image.height / imageVars.height)), 1, 1)
+            const [r, g, b, a] = imgData.data
+            return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+          }
+
+          const xSize = Math.max(1, imageVars.image.width / imageVars.width / camera.zoom)
+          const ySize = Math.max(1, imageVars.image.height / imageVars.height / camera.zoom)
+          for (let x = 0; x < imageVars.image.width; x++) {
+            for (let y = 0; y < imageVars.image.height; y++) {
+              const worldX = imageVars.positionX + (x / imageVars.image.width) * imageVars.width
+              const worldY = imageVars.positionY + (y / imageVars.image.height) * imageVars.height
+              if (worldX < x1 || worldX > x2 || worldY < y1 || worldY > y2) continue
+              const color = getColor(x, y)
+              let area = layer.areas.find(a => a.name === color)
+              if (!area) {
+                area = new Area(null, color, layer, color)
+                layer.areas.push(area)
+              }
+              const bound = { minX: worldX, minY: worldY, maxX: worldX + xSize, maxY: worldY + ySize }
+              quadtree.drawRect(worldX, worldY, worldX + xSize, worldY + ySize, area.id, undefined, bound)
+              console.log(x, y, worldX, worldY, color)
+            }
+          }
+          updateCanvas()
+        }
       },
       onmousedown: (event) => {
         if (event.button === 0 && imageVars.image && imageVars.phase === 'idle') {
