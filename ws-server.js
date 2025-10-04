@@ -17,8 +17,6 @@ if (fs.existsSync('map.json')) {
 
 const clients = new Set();
 function handleMessage(ws, message) {
-  console.log(`Handling message: ${message}`);
-
   const ECHO_RE = /^ECHO:(.*)$/;
   const echoMatch = message.match(ECHO_RE);
   if (echoMatch) {

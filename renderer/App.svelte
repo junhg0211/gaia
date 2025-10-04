@@ -1,654 +1,57 @@
 <script>
-  import { onMount, tick } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import "bootstrap-icons/font/bootstrap-icons.css"
   import Map from './Map.svelte'
-  import { Quadtree, Area as AreaType, Layer as LayerType, deserializeMap } from "../dataframe.js";
+  import { createCanvasController } from './canvasController.js'
+  import { createWebSocketManager } from './websocketManager.js'
 
   let ws
   let connected = false
   let map
-
   let log = []
   const cursors = {}
-  let username = "User"
-
+  let username = 'User'
   let mapUpdate = 0
-
   let wsAddress = 'localhost:48829'
-  function connect() {
-    ws = new WebSocket(`ws://${wsAddress}`)
-    ws.onopen = () => {
-      connected = true
-      addLogEntry('connected to websocket')
-      ws.send(`LOGIN:secret:${username}`)
-      ws.send(`LOAD`)
-    }
-    ws.onmessage = (event) => {
-      addLogEntry(event.data)
-
-      if (event.data.startsWith('MAP:')) {
-        const mapData = event.data.slice(4)
-        map = deserializeMap(JSON.parse(mapData))
-        updateCanvas()
-      } else if (event.data.startsWith('CURSOR:')) {
-        const [id, x, y] = event.data.slice(7).split(',')
-        cursors[id] = { x, y }
-        updateCanvas()
-      } else if (event.data.startsWith('NEWA:')) {
-        const mapData = event.data.slice(5)
-        const [ layerId, areaId, name, color ] = mapData.split(':')
-        const layer = map.findLayer(parseInt(layerId))
-        if (layer) {
-          layer.areas.push(new AreaType(parseInt(areaId), color, layer, name))
-          mapUpdate = (mapUpdate + 1) % 1000000
-        }
-      } else if (event.data.startsWith('NEWL:')) {
-        const mapData = event.data.slice(5)
-        const [ parentId, layerId, name ] = mapData.split(':')
-        const parent = map.findLayer(parseInt(parentId))
-        if (parent) {
-          parent.children.push(new LayerType(parseInt(layerId), new Quadtree(0), parent, [0,0], [1,1], name))
-          mapUpdate = (mapUpdate + 1) % 1000000
-        }
-      } else if (event.data.startsWith('LINE:')) {
-        const mapData = event.data.slice(5)
-        const [ layerId, from, to, areaAndWidth ] = mapData.split(':')
-        const [ x1, y1 ] = from.split(',').map(v => parseInt(v))
-        const [ x2, y2 ] = to.split(',').map(v => parseInt(v))
-        const [ areaId, width ] = areaAndWidth.split(',').map(v => parseInt(v))
-        const layer = map.findLayer(parseInt(layerId))
-        if (layer) {
-          layer.expandTo(x1, y1)
-          layer.expandTo(x2, y2)
-          const [px, py] = layer.pos ?? [0, 0]
-          const [sx, sy] = layer.size ?? [1, 1]
-          const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
-          layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, undefined, bounds)
-          updateCanvas()
-        }
-      } else if (event.data.startsWith('DELL:')) {
-        const mapData = event.data.slice(5)
-        const layerId = parseInt(mapData)
-        const layer = map.findLayer(layerId)
-        if (layer && layer.parent) {
-          const index = layer.parent.children.indexOf(layer)
-          if (index !== -1) {
-            layer.parent.children.splice(index, 1)
-            mapUpdate = (mapUpdate + 1) % 1000000
-          }
-        }
-      } else if (event.data.startsWith('DELA:')) {
-        const mapData = event.data.slice(5)
-        const areaId = parseInt(mapData)
-        const area = map.findArea(areaId)
-        if (area && area.parent) {
-          const index = area.parent.removeArea(areaId)
-          mapUpdate = (mapUpdate + 1) % 1000000
-          updateCanvas()
-        }
-      } else if (event.data.startsWith('RECT:')) {
-        const mapData = event.data.slice(5)
-        let [ layerId, from, to, areaId ] = mapData.split(':')
-        const [ x1, y1 ] = from.split(',').map(v => parseInt(v))
-        const [ x2, y2 ] = to.split(',').map(v => parseInt(v))
-        const layer = map.findLayer(parseInt(layerId))
-        areaId = parseInt(areaId)
-        if (layer) {
-          layer.expandTo(x1, y1)
-          layer.expandTo(x2, y2)
-          const [px, py] = layer.pos ?? [0, 0]
-          const [sx, sy] = layer.size ?? [1, 1]
-          const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
-          layer.quadtree.drawRect(
-            Math.min(x1, x2), Math.min(y1, y2),
-            Math.max(x1, x2), Math.max(y1, y2),
-            areaId, undefined, bounds)
-          updateCanvas()
-        }
-      } else if (event.data.startsWith('POLY:')) {
-        const mapData = event.data.slice(5)
-        let [ layerId, pointsStr, areaId ] = mapData.split(':')
-        const points = pointsStr.split(',').map(v => parseInt(v))
-        const layer = map.findLayer(parseInt(layerId))
-        areaId = parseInt(areaId)
-        if (layer) {
-          for (let i = 0; i < points.length; i += 2) {
-            layer.expandTo(points[i], points[i+1])
-          }
-          const [px, py] = layer.pos ?? [0, 0]
-          const [sx, sy] = layer.size ?? [1, 1]
-          const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
-          const newPoints = []
-          for (let i = 0; i < points.length; i += 2) {
-            newPoints.push([points[i], points[i+1]])
-          }
-          layer.quadtree.drawPolygon(newPoints, areaId, undefined, bounds)
-          updateCanvas()
-        }
-      } else if (event.data.startsWith('ERR:')) {
-        const errorMsg = event.data.slice(4)
-        addLogEntry(`Error from server: ${errorMsg}`)
-      }
-    }
-    ws.onclose = () => {
-      connected = false
-      addLogEntry('connection closed')
-    }
-    ws.onerror = () => {
-      addLogEntry('connection error')
-    }
-  }
-
-  function reloadMap() {
-    if (ws && connected) {
-      ws.send(`LOAD`)
-      mapUpdate = (mapUpdate + 1) % 1000000
-    }
-  }
 
   let logContainer
+  let workspace
+  let canvas
+  let selectedArea
+
   async function addLogEntry(entry) {
     log = [...log, entry]
-    log = log.slice(-100) // Keep only the last 100 entries
-
-    // Scroll to the bottom of the log container
+    log = log.slice(-100)
     if (logContainer) {
       await tick()
       logContainer.scrollTo(0, logContainer.scrollHeight + 100)
     }
   }
 
-  let mouseX, mouseY
-  let workspace
+  let nowTool
 
-  let canvas
-  let ctx
-  async function resizeCanvas() {
-    if (!canvas || !workspace) return
-
-    canvas.width = 0;
-    canvas.height = 0;
-    await tick();
-    canvas.width = workspace.clientWidth
-    canvas.height = workspace.clientHeight
-    updateCanvas()
-  }
-
-  function handleWheel(event) {
-    const rect = canvas.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
-      return;
-    }
-
-    camera.x += (event.deltaX / camera.zoom)
-    camera.y += (event.deltaY / camera.zoom)
-
-    if (event.altKey) {
-      camera.setZoom(camera.zoom * Math.exp(event.deltaY * 0.001))
-    }
-
-    if (nowTool.onwheel)
-      nowTool.onwheel(event)
-
-    updateCanvas()
-  }
-
-  onMount(() => {
-    ctx = canvas.getContext('2d')
-    resizeCanvas()
-
-    window.addEventListener('resize', resizeCanvas)
-    window.addEventListener('wheel', handleWheel, { passive: true })
-    window.addEventListener('mousedown', mouseButtonDownHandler)
-    window.addEventListener("mousemove", mouseMoveHandler);
-    window.addEventListener("mouseup", mouseButtonUpHandler);
+  const canvasController = createCanvasController({
+    getMap: () => map,
+    getCurrentTool: () => nowTool,
+    getCursors: () => cursors,
+    getSelectedArea: () => selectedArea,
+    getWs: () => ws,
+    isConnected: () => connected,
   })
 
-  function mouseMoveHandler(event) {
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
-      return;
-    }
+  const {
+    tools,
+    setCanvasRef,
+    setWorkspaceRef,
+    initialize: initializeCanvas,
+    installGlobalListeners,
+    updateCanvas: redrawCanvas,
+  } = canvasController
 
-    if (isPanning) {
-      const deltaX = (event.clientX - panStartX) / camera.zoom;
-      const deltaY = (event.clientY - panStartY) / camera.zoom;
-      camera.x = initialCameraX - deltaX;
-      camera.y = initialCameraY - deltaY;
-      updateCanvas();
-    }
+  nowTool = tools[0]
 
-    // Get mouse position relative to the workspace
-    const x = parseInt(camera.toWorldX(event.clientX - rect.left))
-    const y = parseInt(camera.toWorldY(event.clientY - rect.top))
-
-    if (ws && connected) {
-      const message = `CURSOR:${x},${y}`
-      ws.send(message)
-    }
-
-    mouseX = x
-    mouseY = y
-
-    if (nowTool.onmousemove)
-      nowTool.onmousemove(event)
-  }
-
-  function mouseButtonUpHandler(event) {
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
-      return;
-    }
-
-    if (event.button === 1) { // Middle mouse button
-      isPanning = false;
-    }
-
-    if (nowTool.onmouseup)
-      nowTool.onmouseup(event)
-  }
-
-  let isPanning = false;
-  let panStartX = 0;
-  let panStartY = 0;
-  let initialCameraX = 0;
-  let initialCameraY = 0;
-  function mouseButtonDownHandler(event) {
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
-      return;
-    }
-
-    if (event.button === 1) { // Middle mouse button
-      // if mouse is in the canvas
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
-        return;
-      }
-
-      event.preventDefault(); // Prevent default behavior like scrolling
-      isPanning = true;
-      panStartX = event.clientX;
-      panStartY = event.clientY;
-      initialCameraX = camera.x;
-      initialCameraY = camera.y;
-    }
-
-    if (nowTool.onmousedown)
-      nowTool.onmousedown(event)
-  }
-
-  const camera = {
-    x: 0,
-    y: 0,
-    zoom: 1,
-    setZoom(zoom) {
-      this.zoom = zoom
-      this.zoom = Math.max(1/10000, Math.min(this.zoom, 100))
-    },
-    toScreenX(worldX) {
-      return (worldX - this.x) * this.zoom + canvas.width / 2
-    },
-    toScreenY(worldY) {
-      return (worldY - this.y) * this.zoom + canvas.height / 2
-    },
-    toWorldX(screenX) {
-      return (screenX - canvas.width / 2) / this.zoom + this.x
-    },
-    toWorldY(screenY) {
-      return (screenY - canvas.height / 2) / this.zoom + this.y
-    }
-  }
-
-  function updateCanvas() {
-    if (!ctx || !canvas) return
-
-    ctx.fillStyle = '#f0f0f0'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    // draw map
-    if (map) {
-      map.draw(ctx, canvas, camera)
-    }
-
-    // Draw grid
-    const gridLength = Math.pow(2, Math.floor(Math.log2(100 / camera.zoom)))
-    const gridSize = gridLength * camera.zoom
-    ctx.strokeStyle = '#ccc'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.font = '10px Arial'
-    ctx.fillStyle = 'black'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    const startX = camera.toScreenX(0) % gridSize
-    const startY = camera.toScreenY(0) % gridSize
-    for (let x = startX; x < canvas.width; x += gridSize) {
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, canvas.height)
-      ctx.fillText(Math.round(camera.toWorldX(x)), x + 2, 2)
-    }
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'middle'
-    for (let y = startY; y < canvas.height; y += gridSize) {
-      ctx.moveTo(0, y)
-      ctx.lineTo(canvas.width, y)
-      ctx.fillText(Math.round(camera.toWorldY(y)), canvas.width - 2, y - 2)
-    }
-    ctx.stroke()
-
-    if (nowTool.render) {
-      nowTool.render(ctx)
-    }
-
-    // draw cursors
-    for (const id in cursors) {
-      const cursor = cursors[id]
-      const screenX = camera.toScreenX(cursor.x)
-      const screenY = camera.toScreenY(cursor.y)
-      ctx.fillStyle = 'red'
-      ctx.beginPath()
-      ctx.arc(screenX, screenY, 5, 0, 2 * Math.PI)
-      ctx.fill()
-      ctx.fillStyle = 'black'
-      ctx.fillText(id, screenX + 8, screenY - 8)
-    }
-  }
-
-  const tools = [
-    {
-      name: "선택",
-      icon: "cursor",
-      hotkey: "v",
-    },
-    {
-      name: "패닝",
-      onmousedown: (e) => {
-        if (e.button === 0) {
-          isPanning = true;
-          panStartX = e.clientX;
-          panStartY = e.clientY;
-          initialCameraX = camera.x;
-          initialCameraY = camera.y;
-        }
-      },
-      onmousemove: (e) => {
-        if (isPanning) {
-          const deltaX = (e.clientX - panStartX) / camera.zoom;
-          const deltaY = (e.clientY - panStartY) / camera.zoom;
-          camera.x = initialCameraX - deltaX;
-          camera.y = initialCameraY - deltaY;
-          updateCanvas();
-        }
-      },
-      onmouseup: (e) => {
-        if (e.button === 0) {
-          isPanning = false;
-        }
-      },
-      icon: "arrows-move",
-      hotkey: "h",
-    },
-    {
-      name: "확대",
-      onmousedown: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.startX = e.clientX
-          nowTool.vars.startY = e.clientY
-          nowTool.vars.initialZoom = camera.zoom
-          nowTool.vars.zooming = true
-        }
-      },
-      onmousemove: (e) => {
-        if (nowTool.vars.zooming) {
-          const delta = (e.clientY + e.clientX) - (nowTool.vars.startY + nowTool.vars.startX)
-          camera.setZoom(nowTool.vars.initialZoom * Math.exp(delta * 0.005))
-          updateCanvas()
-        }
-      },
-      onmouseup: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.zooming = false
-        }
-      },
-      vars: {
-        zooming: false,
-        startX: 0, startY: 0,
-        initialZoom: 1,
-      },
-      icon: "zoom-in",
-      hotkey: "z",
-    },
-    {
-      name: "선",
-      onmousedown: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.x = e.clientX
-          nowTool.vars.y = e.clientY
-          nowTool.vars.brushing = true
-        }
-      },
-      onmousemove: (e) => {
-        if (e.button !== 0) return
-        if (!nowTool.vars.brushing) return;
-
-        nowTool.vars.toX = e.clientX
-        nowTool.vars.toY = e.clientY
-
-        updateCanvas()
-      },
-      onmouseup: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.brushing = false
-
-          if (!map) return
-
-          const startX = parseInt(camera.toWorldX(nowTool.vars.x - canvas.getBoundingClientRect().left))
-          const startY = parseInt(camera.toWorldY(nowTool.vars.y - canvas.getBoundingClientRect().top))
-          const endX = parseInt(camera.toWorldX(nowTool.vars.toX - canvas.getBoundingClientRect().left))
-          const endY = parseInt(camera.toWorldY(nowTool.vars.toY - canvas.getBoundingClientRect().top))
-          ws.send(`LINE:${selectedArea.parent.id}:${startX},${startY}:${endX},${endY}:${selectedArea.id},${nowTool.vars.width}`)
-          updateCanvas()
-        }
-      },
-      onwheel: (e) => {},
-      vars: {
-        brushing: false,
-        width: 10,
-        x: 0, y: 0,
-        toX: 0, toY: 0,
-      },
-      render: (ctx) => {
-        if (nowTool.vars.brushing) {
-          const rect = canvas.getBoundingClientRect()
-
-          ctx.strokeStyle = 'blue'
-          ctx.lineWidth = nowTool.vars.width * camera.zoom
-          ctx.beginPath()
-          ctx.moveTo(nowTool.vars.x - rect.left, nowTool.vars.y - rect.top)
-          ctx.lineTo(nowTool.vars.toX - rect.left, nowTool.vars.toY - rect.top)
-          ctx.stroke()
-        }
-      },
-      icon: "type-underline",
-      hotkey: "l",
-    },
-    {
-      name: "사각형",
-      icon: "square",
-      hotkey: "m",
-      vars: {
-        brushing: false,
-        x: 0, y: 0,
-        toX: 0, toY: 0
-      },
-      onmousedown: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.x = e.clientX
-          nowTool.vars.y = e.clientY
-          nowTool.vars.brushing = true
-        }
-      },
-      onmousemove: (e) => {
-        if (e.button !== 0) return
-        if (!nowTool.vars.brushing) return;
-        nowTool.vars.toX = e.clientX
-        nowTool.vars.toY = e.clientY
-        updateCanvas()
-      },
-      onmouseup: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.brushing = false
-          if (!map) return
-          const startX = parseInt(camera.toWorldX(nowTool.vars.x - canvas.getBoundingClientRect().left))
-          const startY = parseInt(camera.toWorldY(nowTool.vars.y - canvas.getBoundingClientRect().top))
-          const endX = parseInt(camera.toWorldX(nowTool.vars.toX - canvas.getBoundingClientRect().left))
-          const endY = parseInt(camera.toWorldY(nowTool.vars.toY - canvas.getBoundingClientRect().top))
-          const [x1, x2] = startX < endX ? [startX, endX] : [endX, startX]
-          const [y1, y2] = startY < endY ? [startY, endY] : [endY, startY]
-          const area = selectedArea
-          if (area) {
-            ws.send(`RECT:${area.parent.id}:${x1},${y1}:${x2},${y2}:${area.id}`)
-            updateCanvas()
-          }
-        }
-      },
-      render: (ctx) => {
-        if (nowTool.vars.brushing) {
-          const rect = canvas.getBoundingClientRect()
-          const x = Math.min(nowTool.vars.x, nowTool.vars.toX) - rect.left
-          const y = Math.min(nowTool.vars.y, nowTool.vars.toY) - rect.top
-          const width = Math.abs(nowTool.vars.toX - nowTool.vars.x)
-          const height = Math.abs(nowTool.vars.toY - nowTool.vars.y)
-          ctx.strokeStyle = 'blue'
-          ctx.lineWidth = 2
-          ctx.strokeRect(x, y, width, height)
-        }
-      }
-    },
-    {
-      name: "다각형",
-      icon: "hexagon",
-      hotkey: "p",
-      vars: {
-        brushing: false,
-        points: []
-      },
-      onmouseup: (e) => {
-        if (e.button === 0) {
-          if (!nowTool.vars.brushing) {
-            nowTool.vars.points = []
-            nowTool.vars.brushing = true
-          }
-          nowTool.vars.points.push({ x: e.clientX, y: e.clientY })
-          updateCanvas()
-        } else if (e.button === 2) {
-          if (nowTool.vars.brushing && nowTool.vars.points.length >= 3) {
-            nowTool.vars.brushing = false
-            if (!map) return
-            const area = selectedArea
-            if (area) {
-              const worldPoints = nowTool.vars.points.map(p => {
-                return parseInt(camera.toWorldX(p.x - canvas.getBoundingClientRect().left)) + ',' + parseInt(camera.toWorldY(p.y - canvas.getBoundingClientRect().top))
-              }).join(',')
-              ws.send(`POLY:${area.parent.id}:${worldPoints}:${area.id}`)
-              updateCanvas()
-            }
-          }
-        }
-      },
-      onmousemove: (e) => {
-        if (!nowTool.vars.brushing) return;
-        nowTool.vars.toX = e.clientX
-        nowTool.vars.toY = e.clientY
-        updateCanvas()
-      },
-      render: (ctx) => {
-        if (nowTool.vars.brushing && nowTool.vars.points.length > 0) {
-          const rect = canvas.getBoundingClientRect()
-          ctx.strokeStyle = 'blue'
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.moveTo(nowTool.vars.points[0].x - rect.left, nowTool.vars.points[0].y - rect.top)
-          for (let i = 1; i < nowTool.vars.points.length; i++) {
-            ctx.lineTo(nowTool.vars.points[i].x - rect.left, nowTool.vars.points[i].y - rect.top)
-          }
-          ctx.lineTo(nowTool.vars.toX - rect.left, nowTool.vars.toY - rect.top)
-          ctx.stroke()
-
-          for (const point of nowTool.vars.points) {
-            ctx.fillStyle = 'blue'
-            ctx.beginPath()
-            ctx.arc(point.x - rect.left, point.y - rect.top, 5, 0, 2 * Math.PI)
-            ctx.fill()
-          }
-        }
-      }
-    },
-    {
-      name: "브러시",
-      icon: "brush",
-      hotkey: "b",
-      vars: {
-        brushing: false,
-        width: 10,
-        previousX: 0, previousY: 0,
-      },
-      onmousedown: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.brushing = true
-          nowTool.vars.previousX = e.clientX
-          nowTool.vars.previousY = e.clientY
-        }
-      },
-      onmousemove: (e) => {
-        if (e.button !== 0) return
-        if (!nowTool.vars.brushing) return;
-
-        const startX = parseInt(camera.toWorldX(nowTool.vars.previousX - canvas.getBoundingClientRect().left))
-        const startY = parseInt(camera.toWorldY(nowTool.vars.previousY - canvas.getBoundingClientRect().top))
-        const endX = parseInt(camera.toWorldX(e.clientX - canvas.getBoundingClientRect().left))
-        const endY = parseInt(camera.toWorldY(e.clientY - canvas.getBoundingClientRect().top))
-        ws.send(`LINE:${selectedArea.parent.id}:${startX},${startY}:${endX},${endY}:${selectedArea.id},${nowTool.vars.width}`)
-
-        nowTool.vars.previousX = e.clientX
-        nowTool.vars.previousY = e.clientY
-
-        updateCanvas()
-      },
-      onmouseup: (e) => {
-        if (e.button === 0) {
-          nowTool.vars.brushing = false
-        }
-      },
-      onwheel: (e) => {
-        if (e.deltaY < 0) {
-          nowTool.vars.width = Math.min(nowTool.vars.width + 1, 100)
-        } else {
-          nowTool.vars.width = Math.max(nowTool.vars.width - 1, 1)
-        }
-        updateCanvas()
-      },
-    },
-  ]
-  let nowTool = tools[0]
-
-  window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-      return
-    }
-    for (const tool of tools) {
-      if (e.key.toLowerCase() === tool.hotkey.toLowerCase()) {
-        selectTool(tool)()
-        e.preventDefault()
-        break
-      }
-    }
-  })
+  $: canvas && setCanvasRef(canvas)
+  $: workspace && setWorkspaceRef(workspace)
 
   function selectTool(tool) {
     return () => {
@@ -659,14 +62,74 @@
       if (nowTool && nowTool.onstart) {
         nowTool.onstart()
       }
+      redrawCanvas()
     }
   }
 
-  let selectedArea
+  const webSocketManager = createWebSocketManager({
+    getWsAddress: () => wsAddress,
+    getUsername: () => username,
+    onSocketChange: (socketInstance) => {
+      ws = socketInstance
+    },
+    onConnectedChange: (value) => {
+      connected = value
+    },
+    addLogEntry,
+    setMap: (value) => {
+      map = value
+      mapUpdate = (mapUpdate + 1) % 1000000
+      redrawCanvas()
+    },
+    getMap: () => map,
+    updateCanvas: () => redrawCanvas(),
+    bumpMapUpdate: () => {
+      mapUpdate = (mapUpdate + 1) % 1000000
+    },
+    getCursors: () => cursors,
+  })
+
+  const { connect, reloadMap: requestReload } = webSocketManager
+
+  function reloadMap() {
+    if (!connected || !ws) return
+    requestReload()
+  }
+
   function handleAreaSelect(event) {
     const { area } = event.detail
     selectedArea = area
   }
+
+  let removeCanvasListeners = () => {}
+  let removeKeydownListener = () => {}
+
+  onMount(async () => {
+    await tick()
+    initializeCanvas()
+    const teardown = installGlobalListeners()
+    removeCanvasListeners = typeof teardown === 'function' ? teardown : () => {}
+
+    const handleKeydown = (event) => {
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
+        return
+      }
+      for (const tool of tools) {
+        if (event.key.toLowerCase() === tool.hotkey.toLowerCase()) {
+          selectTool(tool)()
+          event.preventDefault()
+          break
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeydown)
+    removeKeydownListener = () => window.removeEventListener('keydown', handleKeydown)
+  })
+
+  onDestroy(() => {
+    removeCanvasListeners?.()
+    removeKeydownListener?.()
+  })
 </script>
 
 <svelte:head>
