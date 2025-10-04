@@ -166,7 +166,7 @@
       <div>
         <button title={tool.name} disabled={nowTool === tool} on:click={selectTool(tool)}>
           <i class="bi bi-{tool.icon}"></i>
-          {tool.name} ({tool.hotkey.toUpperCase()})
+          <!-- {tool.name} ({tool.hotkey.toUpperCase()}) -->
         </button>
       </div>
       {/each}
@@ -214,7 +214,6 @@
     display: flex;
   }
   .toolbar-window {
-    width: 200px;
     background-color: #e0e0e0;
     border-right: 1px solid #ccc;
   }
