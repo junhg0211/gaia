@@ -587,6 +587,8 @@ export function createCanvasController(options) {
     if (!withinCanvas(event)) return
     if (event.altKey) {
       camera.setZoom(camera.zoom * Math.exp(event.deltaY * 0.001))
+    } else if (event.shiftKey) {
+      camera.x += event.deltaY / camera.zoom
     } else {
       camera.x += event.deltaX / camera.zoom
       camera.y += event.deltaY / camera.zoom
