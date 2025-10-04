@@ -2,6 +2,7 @@
   import Area from './Area.svelte';
   import Layer from './Layer.svelte';
   import { Quadtree, Area as AreaType, Layer as LayerType } from "../dataframe.js";
+  import "bootstrap-icons/font/bootstrap-icons.css";
 
   export let layer;
   export let ws;
@@ -30,6 +31,16 @@
   }
 
   let unfold = true;
+
+  function upLayer() {
+    const index = layer.parent.children.indexOf(layer) - 1;
+    ws.send(`LYOD:${layer.id}:${index}`);
+  }
+
+  function downLayer() {
+    const index = layer.parent.children.indexOf(layer) + 2;
+    ws.send(`LYOD:${layer.id}:${index}`);
+  }
 </script>
 
 <div class="layer-container">
@@ -40,8 +51,10 @@
   {#if unfold}
   <div>
     <div class="add-area-inputs">
-      <button on:click={deleteLayer}>레이어 삭제</button>
-      <button on:click={addArea}>영역 추가</button>
+      <button on:click={deleteLayer}><i class="bi bi-trash"></i></button>
+      <button on:click={addArea}><i class="bi bi-palette2"></i></button>
+      <button on:click={upLayer}><i class="bi bi-arrow-up"></i></button>
+      <button on:click={downLayer}><i class="bi bi-arrow-down"></i></button>
     </div>
     {#each layer.areas as area}
     <Area {ws} {area} {selectedArea} on:areaselect />
@@ -49,7 +62,7 @@
   </div>
   <div class="child-layers">
     <div class="add-layer-inputs">
-      <button on:click={addLayer}>레이어 추가</button>
+      <button on:click={addLayer}><i class="bi bi-file-plus"></i></button>
     </div>
     {#each layer.children as child}
     <Layer {ws} {selectedArea} layer={child} on:areaselect />

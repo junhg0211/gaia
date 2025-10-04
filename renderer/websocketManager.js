@@ -195,6 +195,22 @@ export function createWebSocketManager({
     bumpMapUpdate?.()
   }
 
+  const handleSetLayerOrderMessage = (data) => {
+    const payload = data.slice(5)
+    const [layerIdStr, newIndexStr] = payload.split(':')
+    const layerId = Number(layerIdStr)
+    const newIndex = Number(newIndexStr)
+    const map = getMap?.()
+    if (!map) return
+    const layer = map.findLayer(layerId)
+    if (!layer || !layer.parent) return
+    const currentIndex = layer.parent.children.indexOf(layer)
+    if (currentIndex === -1 || currentIndex === newIndex) return
+    layer.parent.children.splice(currentIndex, 1)
+    layer.parent.children.splice(newIndex, 0, layer)
+    bumpMapUpdate?.()
+  }
+
   const handleErrorMessage = (data) => {
     const message = data.slice(4)
     addLogEntry?.(`Error from server: ${message}`)
@@ -227,6 +243,8 @@ export function createWebSocketManager({
       handleSetAreaColorMessage(data)
     } else if (data.startsWith('SLNA:')) {
       handleSetLayerNameMessage(data)
+    } else if (data.startsWith('LYOD:')) {
+      handleSetLayerOrderMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
     }

@@ -427,6 +427,46 @@ async function handleMessage(ws, message) {
     return;
   }
 
+  const LAYERORDER_RE = /^LYOD:(\d+):(\d+)$/;
+  const layerOrderMatch = message.match(LAYERORDER_RE);
+  if (layerOrderMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(layerOrderMatch[1]);
+    const newIndex = parseInt(layerOrderMatch[2]);
+
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    if (!layer.parent) {
+      ws.send('ERR Layer has no parent');
+      return;
+    }
+
+    const siblings = layer.parent.children;
+    const currentIndex = siblings.findIndex(child => child.id === layerId);
+    if (currentIndex === -1) {
+      ws.send('ERR Layer not found in parent');
+      return;
+    }
+
+    siblings.splice(currentIndex, 1);
+    siblings.splice(newIndex, 0, layer);
+
+    ws.send(`OK`);
+
+    const broadcastMessage = `LYOD:${layerId}:${newIndex}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
   // If no command matched
   ws.send(`ERR:Unknown command: ${message}`);
 }
