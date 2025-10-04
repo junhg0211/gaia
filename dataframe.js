@@ -474,13 +474,35 @@ class Quadtree {
   }
 
   expandBeing(index) {
-    this.divide();
-    this.children[index] = new Quadtree(this.value, this);
-    for (let i = 0; i < 4; i++) {
-      if (i !== index) {
-        this.children[i] = new Quadtree(0, this);
+    if (this.isLeaf()) {
+      const originalValue = this.value;
+      this.divide();
+      for (let i = 0; i < 4; i++) {
+        if (i === index) {
+          this.children[i].set(originalValue);
+        } else {
+          this.children[i].set(0);
+        }
+      }
+      return;
+    }
+
+    const preservedChild = new Quadtree(this.value, this);
+    preservedChild.children = this.children;
+    if (preservedChild.children) {
+      for (const child of preservedChild.children) {
+        child.parent = preservedChild;
       }
     }
+
+    this.children = [
+      new Quadtree(0, this),
+      new Quadtree(0, this),
+      new Quadtree(0, this),
+      new Quadtree(0, this),
+    ];
+    this.children[index] = preservedChild;
+    this.value = 0;
   }
 
   changeValue(oldValue, newValue) {

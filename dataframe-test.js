@@ -131,6 +131,45 @@ const tests = [
     },
   },
   {
+    name: 'Quadtree preserves polygons when expanding bounds',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [1, 1], 'poly-layer');
+
+      const firstPolygon = [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ];
+
+      for (const [x, y] of firstPolygon) {
+        layer.expandTo(x, y);
+      }
+      let bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawPolygon(firstPolygon, 5, undefined, bounds);
+
+      assert.equal(sampleQuadtreeValue(layer.quadtree, 0.5, 0.5, bounds), 5);
+
+      const secondPolygon = [
+        [2, 2],
+        [3, 2],
+        [3, 3],
+        [2, 3],
+      ];
+
+      for (const [x, y] of secondPolygon) {
+        layer.expandTo(x, y);
+      }
+      bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawPolygon(secondPolygon, 8, undefined, bounds);
+
+      assert.equal(sampleQuadtreeValue(layer.quadtree, 0.5, 0.5, bounds), 5);
+      assert.equal(sampleQuadtreeValue(layer.quadtree, 2.5, 2.5, bounds), 8);
+    },
+  },
+  {
     name: 'Map can be saved to and loaded from file',
     run: async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gaia-map-'));
