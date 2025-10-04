@@ -537,10 +537,11 @@ export function createCanvasController(options) {
 
   function handleWheel(event) {
     if (!withinCanvas(event)) return
-    camera.x += event.deltaX / camera.zoom
-    camera.y += event.deltaY / camera.zoom
     if (event.altKey) {
       camera.setZoom(camera.zoom * Math.exp(event.deltaY * 0.001))
+    } else {
+      camera.x += event.deltaX / camera.zoom
+      camera.y += event.deltaY / camera.zoom
     }
     const activeTool = getCurrentTool?.()
     if (activeTool && activeTool.onwheel) {
