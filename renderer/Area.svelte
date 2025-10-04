@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import "bootstrap-icons/font/bootstrap-icons.css";
 
   export let area;
   export let ws;
@@ -34,13 +35,10 @@
     <input style="color" color={area.color} type="color" value={area.color} disabled={area.id === 0} on:change={setAreaColor} />
     <input type="text" value={area.name} on:change={setAreaName} disabled={area.id === 0} />
     <div class="spacer"></div>
-    <span style="color: {area.color};">•</span>
+    {#if area.id !== 0}
+      <button on:click={deleteArea}><i class="bi bi-trash"></i></button>
+    {/if}
   </div>
-  {#if area.id !== 0}
-  <div>
-    <button on:click={deleteArea}>영역 삭제</button>
-  </div>
-  {/if}
 </button>
 
 <style>
@@ -67,6 +65,9 @@
     cursor: pointer;
     width: 32px;
     padding: 0;
+  }
+  input[type="color"]:disabled {
+    cursor: not-allowed;
   }
 
   .area-container {

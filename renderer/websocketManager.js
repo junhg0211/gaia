@@ -209,6 +209,7 @@ export function createWebSocketManager({
     layer.parent.children.splice(currentIndex, 1)
     layer.parent.children.splice(newIndex, 0, layer)
     bumpMapUpdate?.()
+    updateCanvas?.()
   }
 
   const handleErrorMessage = (data) => {
