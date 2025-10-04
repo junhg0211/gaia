@@ -861,9 +861,9 @@ export function createCanvasController(options) {
     ctx.stroke()
       let label = Math.round(camera.toWorldY(y))
       if (label > 0) {
-        label = `${label}N`
+        label = `${label}S`
       } else if (label < 0) {
-        label = `${-label}S`
+        label = `${-label}N`
       }
       ctx.fillText(label, canvas.width - 2, y)
     }
