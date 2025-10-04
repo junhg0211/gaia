@@ -222,11 +222,7 @@ function handleMessage(ws, message) {
       return;
     }
 
-    if (!area.parent) {
-      ws.send('ERR Area has no parent layer');
-      return;
-    }
-    if (area.parent instanceof Number) {
+    if (!(area.parent instanceof Layer)) {
       area.parent = map.findLayer(area.parent);
     }
     const layer = area.parent;

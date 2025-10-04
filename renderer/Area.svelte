@@ -16,7 +16,7 @@
 </script>
 
 <div class="area-container">
-  <div>{area.name}</div>
+  <div>{area.name} <span style="color: {area.color};">•</span></div>
   <div>
     <button on:click={deleteArea}>영역 삭제</button>
   </div>
