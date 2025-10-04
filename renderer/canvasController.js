@@ -326,6 +326,13 @@ function buildTools({
       icon: 'rulers',
       hotkey: 'i',
       vars: lineVars,
+      onstart: () => {
+        lineVars.x = 0
+        lineVars.y = 0
+        lineVars.toX = 0
+        lineVars.toY = 0
+        lineVars.brushing = false
+      },
       onmousedown: (event) => {
         if (event.button === 0) {
           lineVars.x = event.clientX
@@ -344,10 +351,8 @@ function buildTools({
         if (event.button !== 0) return
         if (!lineVars.brushing) return
         lineVars.brushing = false
-        updateCanvas()
       },
       render: (ctx) => {
-        if (!lineVars.brushing) return
         const rect = ensureCanvasRect()
         if (!rect) return
         const startX = lineVars.x - rect.left
@@ -367,12 +372,16 @@ function buildTools({
         const dx = toWorld.x - fromWorld.x
         const dy = toWorld.y - fromWorld.y
         const distance = Math.sqrt(dx * dx + dy * dy)
+        function numberWithCommas(x) {
+          return x.toString().replace(/\B(?<!\.\d*)(?=(\d{3})+(?!\d))/g, ",");
+        }
+        const distanceStr = numberWithCommas(distance.toFixed(2));
 
         ctx.fillStyle = 'black'
         ctx.font = '14px Arial'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'bottom'
-        ctx.fillText(`${distance.toFixed(2)} units`, (startX + endX) / 2, (startY + endY) / 2 - 5)
+        ctx.fillText(`${distanceStr} m`, (startX + endX) / 2, (startY + endY) / 2 - 5)
       },
     },
   ]
