@@ -17,6 +17,7 @@ if (fs.existsSync('map.gaia')) {
 
 const clients = new Set();
 let saveCounter = 1000;
+const snapshots = [];
 async function handleMessage(ws, message) {
   saveCounter--;
   if (saveCounter <= 0) {
@@ -464,6 +465,41 @@ async function handleMessage(ws, message) {
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
     }
+    return;
+  }
+
+  const SNAPSHOT_RE = /^SNAP$/;
+  if (message.match(SNAPSHOT_RE)) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const snapshot = JSON.stringify(serializeMap(map));
+    snapshots.push(snapshot);
+    ws.send(`OK Snapshot taken`);
+    while (snapshots.length > 200) {
+      snapshots.shift();
+    }
+    return;
+  }
+
+  const UNDO_RE = /^UNDO$/;
+  if (message.match(UNDO_RE)) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    if (snapshots.length === 0) {
+      ws.send('ERR No snapshots available');
+      return;
+    }
+    const snapshot = snapshots.pop();
+    map = Map.fromJSON(JSON.parse(snapshot));
+    const broadcastMessage = `MAP:${JSON.stringify(serializeMap(map))}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    ws.send('OK Undo applied');
     return;
   }
 

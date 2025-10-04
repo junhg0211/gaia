@@ -172,6 +172,7 @@ function buildTools({
         const fromWorld = toWorldPoint(lineVars.x, lineVars.y)
         const toWorld = toWorldPoint(event.clientX, event.clientY)
         if (!fromWorld || !toWorld) return
+        sendMessage("SNAP");
         sendMessage(`LINE:${selectedArea.parent.id}:${fromWorld.x},${fromWorld.y}:${toWorld.x},${toWorld.y}:${selectedArea.id},${lineVars.width}`)
         updateCanvas()
       },
@@ -228,6 +229,7 @@ function buildTools({
         const y1 = Math.min(fromWorld.y, toWorld.y)
         const x2 = Math.max(fromWorld.x, toWorld.x)
         const y2 = Math.max(fromWorld.y, toWorld.y)
+        sendMessage("SNAP");
         sendMessage(`RECT:${selectedArea.parent.id}:${x1},${y1}:${x2},${y2}:${selectedArea.id}`)
         updateCanvas()
       },
@@ -269,6 +271,7 @@ function buildTools({
             return wp ? `${wp.x},${wp.y}` : null
           }).filter(Boolean)
           if (worldPoints.length !== polygonVars.points.length) return
+          sendMessage("SNAP");
           sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}`)
           updateCanvas()
         }
@@ -311,6 +314,7 @@ function buildTools({
           brushVars.brushing = true
           brushVars.previousX = event.clientX
           brushVars.previousY = event.clientY
+          sendMessage("SNAP");
         }
       },
       onmousemove: (event) => {
@@ -454,6 +458,7 @@ function buildTools({
           updateCanvas()
           return
         }
+        sendMessage("SNAP");
         sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}`)
         lassoVars.points = []
         updateCanvas()
@@ -1002,6 +1007,33 @@ export function createCanvasController(options) {
     }
   }
 
+  function keyDownHandler(event) {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
+      return
+    }
+
+    if (event.key === 'z' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault()
+      ws.send('UNDO')
+      return
+    }
+
+    const activeTool = getCurrentTool?.()
+    if (activeTool && activeTool.onkeydown) {
+      activeTool.onkeydown(event)
+    }
+  }
+
+  function keyUpHandler(event) {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
+      return
+    }
+    const activeTool = getCurrentTool?.()
+    if (activeTool && activeTool.onkeyup) {
+      activeTool.onkeyup(event)
+    }
+  }
+
   function setCanvasRef(element) {
     canvas = element
     if (canvas) {
@@ -1025,12 +1057,16 @@ export function createCanvasController(options) {
     const boundMouseDown = (event) => mouseButtonDownHandler(event)
     const boundMouseMove = (event) => mouseMoveHandler(event)
     const boundMouseUp = (event) => mouseButtonUpHandler(event)
+    const boundKeyDown = (event) => keyDownHandler(event)
+    const boundKeyUp = (event) => keyUpHandler(event)
 
     window.addEventListener('resize', boundResize)
     window.addEventListener('wheel', boundWheel, { passive: true })
     window.addEventListener('mousedown', boundMouseDown)
     window.addEventListener('mousemove', boundMouseMove)
     window.addEventListener('mouseup', boundMouseUp)
+    window.addEventListener('keydown', boundKeyDown)
+    window.addEventListener('keyup', boundKeyUp)
 
     return () => {
       window.removeEventListener('resize', boundResize)
@@ -1038,6 +1074,8 @@ export function createCanvasController(options) {
       window.removeEventListener('mousedown', boundMouseDown)
       window.removeEventListener('mousemove', boundMouseMove)
       window.removeEventListener('mouseup', boundMouseUp)
+      window.addEventListener('keydown', boundKeyDown)
+      window.addEventListener('keyup', boundKeyUp)
     }
   }
 
