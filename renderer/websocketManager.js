@@ -11,6 +11,7 @@ export function createWebSocketManager({
   updateCanvas,
   bumpMapUpdate,
   getCursors,
+  saveMap,
 }) {
   let socket
 

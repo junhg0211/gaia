@@ -93,6 +93,11 @@
 
   const { connect, reloadMap: requestReload } = webSocketManager
 
+  function saveMap() {
+    if (!connected || !ws || !map) return
+    ws.send('SAVE')
+  }
+
   function reloadMap() {
     if (!connected || !ws) return
     requestReload()
@@ -151,14 +156,14 @@
     <div>Gaia</div>
     {#if connected}
       <div>
-        <button on:click={reloadMap}>Reload Map</button>
-        Connected to WebSocket server
+        <button on:click={saveMap}><i class="bi bi-floppy"></i></button>
+        <button on:click={reloadMap}><i class="bi bi-arrow-clockwise"></i></button>
       </div>
     {:else}
       <div>
         <input type="text" placeholder="Username" bind:value={username} />
         <input type="text" placeholder="localhost:48829" bind:value={wsAddress} />
-        <button on:click={connect}>Connect to WebSocket</button>
+        <button on:click={connect}><i class="bi bi-ethernet"></i></button>
       </div>
     {/if}
   </div>
