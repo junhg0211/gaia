@@ -398,8 +398,12 @@ function buildTools({
         }
         const distanceStr = numberWithCommas(distance.toFixed(2));
 
-        ctx.fillStyle = 'black'
         ctx.font = '14px Arial'
+        const textwidth = ctx.measureText(`${distanceStr} m`).width
+        ctx.fillStyle = 'white'
+        ctx.fillRect((startX + endX) / 2 - textwidth / 2 - 4, (startY + endY) / 2 - 20, textwidth + 8, 16)
+
+        ctx.fillStyle = 'black'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'bottom'
         ctx.fillText(`${distanceStr} m`, (startX + endX) / 2, (startY + endY) / 2 - 5)
