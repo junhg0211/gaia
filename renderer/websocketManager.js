@@ -193,7 +193,10 @@ export function createWebSocketManager({
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close()
     }
-    const address = getWsAddress?.()
+    let address = getWsAddress?.()
+    if (!/:/.test(address)) {
+      address += ':48829'
+    }
     if (!address) return
     socket = new WebSocket(`ws://${address}`)
     if (onSocketChange) {
@@ -215,8 +218,8 @@ export function createWebSocketManager({
       addLogEntry?.('connection closed')
       socket = null
     }
-    socket.onerror = () => {
-      addLogEntry?.('connection error')
+    socket.onerror = (e) => {
+      addLogEntry?.(`websocket error`)
       socket = null
       setConnected(false)
     }

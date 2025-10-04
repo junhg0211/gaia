@@ -505,6 +505,44 @@ export function createCanvasController(options) {
     }
     ctx.stroke()
 
+    // 카메라 줌 레벨 따라서 축척 그리기
+    // 1픽셀은 1미터
+    // 화면 왼쪽 아래에 1 or 2 or 5 단위로 눈금 표시
+    // 눈금 하나의 길이는 100-200 픽셀 사이
+    const units = [1, 2, 5]
+    let unit = 0.1
+    while (unit * camera.zoom < 60) {
+      if (unit / Math.pow(10, Math.floor(Math.log10(unit))) === 1) {
+        unit *= 2
+      } else if (unit / Math.pow(10, Math.floor(Math.log10(unit))) === 2) {
+        unit *= 2.5
+      } else {
+        unit *= 2
+      }
+    }
+    const repeats = Math.ceil(300 / (unit * camera.zoom))
+
+    const scaleBarLength = unit * camera.zoom
+    const padding = 10
+    ctx.fillStyle = 'black'
+    const yPos = canvas.height - padding
+    for (let i = 0; i < repeats; i++) {
+      const xPos = padding + i * scaleBarLength
+      ctx.fillStyle = i % 2 === 0 ? 'white' : 'black'
+      ctx.fillRect(xPos, yPos, scaleBarLength, 5)
+
+      ctx.fillStyle = 'black'
+      ctx.font = '10px Arial'
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'bottom'
+      const label = (i + 1) * unit >= 1000 ? `${((i + 1) * unit / 1000).toFixed(0)} km` : `${((i + 1) * unit).toFixed(0)} m`
+      ctx.fillText(label, xPos + scaleBarLength, yPos - 2)
+    }
+    ctx.strokeStyle = 'black'
+    ctx.lineWidth = 1
+    ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
+
+    // 도구
     const activeTool = getCurrentTool?.()
     if (activeTool && activeTool.render) {
       activeTool.render(ctx)

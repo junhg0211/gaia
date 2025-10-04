@@ -12,7 +12,7 @@
   const cursors = {}
   let username = 'User'
   let mapUpdate = 0
-  let wsAddress = 'localhost:48829'
+  let wsAddress = 'localhost'
 
   let logContainer
   let workspace
