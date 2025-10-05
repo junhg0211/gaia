@@ -1068,6 +1068,7 @@ export function createCanvasController(options) {
 
     ctx.fillStyle = '#f0f0f0'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.globalAlpha = 1
 
     const map = getMap?.()
     if (map) {

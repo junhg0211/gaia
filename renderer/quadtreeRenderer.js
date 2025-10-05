@@ -257,6 +257,8 @@ function drawLayerDirect(layer, ctx, canvas, camera, depth = 11) {
   const effectiveDepth = Math.max(depth, 24)
 
   if (layer.visible) {
+    ctx.globalAlpha = layer.opacity ?? 1.0
+
     drawNodeAdaptive({
       node: layer.quadtree,
       bounds,
@@ -295,6 +297,8 @@ export function createMapRenderer() {
       const screenY = camera.toScreenY(bounds.minY)
       const screenWidth = (bounds.maxX - bounds.minX) * camera.zoom
       const screenHeight = (bounds.maxY - bounds.minY) * camera.zoom
+
+      ctx.globalAlpha = layer.opacity ?? 1.0
 
       if (typeof ctx.imageSmoothingEnabled === 'boolean') {
         ctx.imageSmoothingEnabled = false

@@ -53,24 +53,31 @@
 
   let visible = true;
   $: {
-    layer.visible = visible
+    layer.visible = unfold && visible;
     updateCanvas();
   }
+
+  layer.opacity = layer.opacity ?? 1.0;
 </script>
 
 <div class="layer-container">
   <div class="name">
     <input type="checkbox" bind:checked={visible} />
+    {#if visible}
     <input type="checkbox" bind:checked={unfold} />
+    {/if}
     <input type="text" bind:value={layer.name} on:change={changeLayerName} />
   </div>
-  {#if unfold}
+  {#if unfold && visible}
   <div>
     <div class="add-area-inputs">
       <button on:click={deleteLayer}><i class="bi bi-trash"></i></button>
       <button on:click={addArea}><i class="bi bi-palette2"></i></button>
       <button on:click={upLayer}><i class="bi bi-arrow-up"></i></button>
       <button on:click={downLayer}><i class="bi bi-arrow-down"></i></button>
+    </div>
+    <div class="opacity-bar">
+      <input type="range" min="0" max="1" step="0.01" bind:value={layer.opacity} on:input={updateCanvas} />
     </div>
     {#each layer.areas as area}
     <Area {ws} {area} {selectedArea} on:areaselect />
