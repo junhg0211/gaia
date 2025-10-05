@@ -356,6 +356,41 @@ class Layer {
     this.quadtree.changeValue(areaId, 0);
     this.areas = this.areas.filter(area => area.id !== areaId);
   }
+
+  cleanup() {
+    if (!this.quadtree || !this.quadtree.children) return;
+
+    const nonEmptyChildren = this.quadtree.children.filter(child => !child.isLeaf() || child.value !== 0);
+    if (nonEmptyChildren.length !== 1) return;
+
+    const childIndex = this.quadtree.children.indexOf(nonEmptyChildren[0]);
+    const [px, py] = this.pos;
+    const [sx, sy] = this.size;
+
+    const halfSx = sx / 2;
+    const halfSy = sy / 2;
+
+    switch (childIndex) {
+      case 0:
+        this.pos = [px, py];
+        break;
+      case 1:
+        this.pos = [px + halfSx, py];
+        break;
+      case 2:
+        this.pos = [px, py + halfSy];
+        break;
+      case 3:
+        this.pos = [px + halfSx, py + halfSy];
+        break;
+    }
+
+    this.size = [halfSx, halfSy];
+    this.quadtree = nonEmptyChildren[0];
+    this.quadtree.parent = null;
+
+    this.cleanup();
+  }
 }
 
 let areaHighestId = 0;

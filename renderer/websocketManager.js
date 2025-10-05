@@ -91,7 +91,7 @@ export function createWebSocketManager({
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const depth = Math.log2(layer.size[0] / precision)
     layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds)
-    console.log("drawLine", { x1, y1, x2, y2, width, areaId, depth, bounds })
+    layer.cleanup()
     updateCanvas?.()
   }
 
@@ -146,6 +146,7 @@ export function createWebSocketManager({
       depth,
       bounds,
     )
+    layer.cleanup()
     updateCanvas?.()
   }
 
@@ -195,6 +196,7 @@ export function createWebSocketManager({
     }
     const depth = Math.log2(layer.size[0] / precision)
     layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds)
+    layer.cleanup()
     updateCanvas?.()
   }
 

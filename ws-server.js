@@ -228,6 +228,7 @@ async function handleMessage(ws, message) {
 
     const depth = Math.log2(layer.size[0] / precision);
     layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, depth, bounds);
+    layer.cleanup();
 
     const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}:${precision}`;
     for (const [clientWs] of clients) {
@@ -485,6 +486,7 @@ async function handleMessage(ws, message) {
 
     const depth = Math.log2(layer.size[0] / precision);
     layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds);
+    layer.cleanup();
 
     if (boardcasting) {
       const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
@@ -534,6 +536,7 @@ async function handleMessage(ws, message) {
     const depth = Math.log2(layer.size[0] / precision);
     console.log(depth)
     layer.quadtree.drawPolygon(newPoints, color, depth, bounds);
+    layer.cleanup();
 
     const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;
     for (const [clientWs] of clients) {
