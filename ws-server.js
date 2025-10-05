@@ -1,6 +1,6 @@
 // index.js
 import { WebSocketServer } from 'ws';
-import { loadMapFromFile } from './dataframe-fs.js';
+import { loadMapFromFile, saveMapToFile } from './dataframe-fs.js';
 import fs from 'fs';
 
 import { Map, Layer, Area, Quadtree, serializeMap, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
@@ -69,7 +69,9 @@ async function handleMessage(ws, message) {
       ws.send('ERR Not logged in');
       return;
     }
-    // Here you would implement actual saving logic
+
+    await saveMapToFile(map, 'map.gaia');
+
     ws.send('OK Map saved');
     return;
   }
