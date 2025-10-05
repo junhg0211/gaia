@@ -1007,7 +1007,7 @@ export function createCanvasController(options) {
     y: 0,
     zoom: 1,
     setZoom(zoom) {
-      this.zoom = clamp(zoom, 1 / 10000, 10000)
+      this.zoom = clamp(zoom, 1 / 100000, 1000)
     },
     toScreenX(worldX) {
       const width = canvas ? canvas.width : 0
