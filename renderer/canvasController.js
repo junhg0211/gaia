@@ -987,6 +987,7 @@ export function createCanvasController(options) {
 
     const activeTool = getCurrentTool?.()
     if (activeTool && activeTool.onmouseup) {
+      console.log('mouseup', event)
       activeTool.onmouseup(event)
     }
   }

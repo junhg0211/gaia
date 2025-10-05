@@ -416,7 +416,7 @@ class Quadtree {
 
     if (!circleIntersectsRect(x, y, radius, nodeBounds)) return;
 
-    if (circleContainsRect(x, y, radius, nodeBounds) || depth === 0) {
+    if (circleContainsRect(x, y, radius, nodeBounds) || depth <= 0) {
       this.set(value);
       return;
     }
@@ -453,7 +453,7 @@ class Quadtree {
       return;
     }
 
-    if (depth === 0) {
+    if (depth <= 0) {
       if (polygonIntersectsRect(points, nodeBounds, polyBounds)) {
         this.set(value);
       }

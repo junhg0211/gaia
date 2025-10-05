@@ -30,6 +30,8 @@ async function handleMessage(ws, message) {
     console.log('💾 Map auto-saved');
   }
 
+  console.log(`📩 Received: ${message}`);
+
   const ECHO_RE = /^ECHO:(.*)$/;
   const echoMatch = message.match(ECHO_RE);
   if (echoMatch) {
@@ -348,7 +350,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  const RECT_RE = /^RECT:(\d+):([0-9\-]+),([0-9\-]+):([0-9\-]+),([0-9\-]+):(\d+):([0-9\.]+)$/;
+  const RECT_RE = /^RECT:(\d+):([0-9\-\.]+),([0-9\-\.]+):([0-9\-\.]+),([0-9\-\.]+):(\d+):([0-9\.]+)$/;
   const rectMatch = message.match(RECT_RE);
   if (rectMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -356,10 +358,10 @@ async function handleMessage(ws, message) {
       return;
     }
     const layerId = parseInt(rectMatch[1]);
-    const x1 = parseInt(rectMatch[2]);
-    const y1 = parseInt(rectMatch[3]);
-    const x2 = parseInt(rectMatch[4]);
-    const y2 = parseInt(rectMatch[5]);
+    const x1 = parseFloat(rectMatch[2]);
+    const y1 = parseFloat(rectMatch[3]);
+    const x2 = parseFloat(rectMatch[4]);
+    const y2 = parseFloat(rectMatch[5]);
     const color = parseInt(rectMatch[6]);
     const precision = parseFloat(rectMatch[7]);
 
@@ -387,7 +389,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  const FILLPOLY_RE = /^POLY:(\d+):((?:[0-9\-]+,[0-9\-]+,?)+):(\d+):([0-9\.]+)$/;
+  const FILLPOLY_RE = /^POLY:(\d+):((?:[0-9\-\.]+,[0-9\-\.]+,?)+):(\d+):([0-9\.]+)$/;
   const fillPolyMatch = message.match(FILLPOLY_RE);
   if (fillPolyMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -399,7 +401,7 @@ async function handleMessage(ws, message) {
     const color = parseInt(fillPolyMatch[3]);
     const precision = parseFloat(fillPolyMatch[4]);
 
-    const points = pointsStr.split(',').map(v => parseInt(v));
+    const points = pointsStr.split(',').map(v => parseFloat(v));
     if (points.length < 6 || points.length % 2 !== 0) {
       ws.send('ERR Invalid polygon points');
       return;
@@ -422,6 +424,7 @@ async function handleMessage(ws, message) {
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
     const depth = Math.log2(layer.size[0] / precision);
+    console.log(depth)
     layer.quadtree.drawPolygon(newPoints, color, depth, bounds);
 
     const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;

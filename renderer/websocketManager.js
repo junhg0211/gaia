@@ -61,10 +61,11 @@ export function createWebSocketManager({
 
   const handleLineMessage = (data) => {
     const payload = data.slice(5)
-    const [layerId, from, to, areaAndWidth] = payload.split(':')
+    const [layerId, from, to, areaAndWidth, precision] = payload.split(':')
     const [x1, y1] = from.split(',').map((value) => Number(value))
     const [x2, y2] = to.split(',').map((value) => Number(value))
     const [areaId, width] = areaAndWidth.split(',').map((value) => Number(value))
+    precision = parseFloat(precision) || 1
     const map = getMap?.()
     if (!map) return
     const layer = map.findLayer(Number(layerId))
@@ -74,7 +75,8 @@ export function createWebSocketManager({
     const [px, py] = layer.pos ?? [0, 0]
     const [sx, sy] = layer.size ?? [1, 1]
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
-    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, undefined, bounds)
+    const depth = Math.log2(layer.size[0] / precision)
+    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds)
     updateCanvas?.()
   }
 
@@ -105,9 +107,10 @@ export function createWebSocketManager({
 
   const handleRectMessage = (data) => {
     const payload = data.slice(5)
-    let [layerId, from, to, areaId] = payload.split(':')
+    let [layerId, from, to, areaId, precision] = payload.split(':')
     const [x1, y1] = from.split(',').map((value) => Number(value))
     const [x2, y2] = to.split(',').map((value) => Number(value))
+    precision = parseFloat(precision) || 1
     const map = getMap?.()
     if (!map) return
     const layer = map.findLayer(Number(layerId))
@@ -118,13 +121,14 @@ export function createWebSocketManager({
     const [px, py] = layer.pos ?? [0, 0]
     const [sx, sy] = layer.size ?? [1, 1]
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+    const depth = Math.log2(layer.size[0] / precision)
     layer.quadtree.drawRect(
       Math.min(x1, x2),
       Math.min(y1, y2),
       Math.max(x1, x2),
       Math.max(y1, y2),
       parsedAreaId,
-      undefined,
+      depth,
       bounds,
     )
     updateCanvas?.()
@@ -132,7 +136,8 @@ export function createWebSocketManager({
 
   const handlePolygonMessage = (data) => {
     const payload = data.slice(5)
-    let [layerId, pointsStr, areaId] = payload.split(':')
+    let [layerId, pointsStr, areaId, precision] = payload.split(':')
+    precision = parseFloat(precision) || 1
     const map = getMap?.()
     if (!map) return
     const layer = map.findLayer(Number(layerId))
@@ -149,7 +154,8 @@ export function createWebSocketManager({
     for (let i = 0; i < points.length; i += 2) {
       newPoints.push([points[i], points[i + 1]])
     }
-    layer.quadtree.drawPolygon(newPoints, parsedAreaId, undefined, bounds)
+    const depth = Math.log2(layer.size[0] / precision)
+    layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds)
     updateCanvas?.()
   }
 
