@@ -14,6 +14,7 @@ function buildTools({
   getSelectedArea,
   getMap,
   sendMessage,
+  setCurrentTool,
 }) {
   const ensureCanvasRect = () => getCanvasRect() ?? null
 
@@ -356,7 +357,6 @@ function buildTools({
         if (!rect) return
         const x = brushVars.mouseX - rect.left
         const y = brushVars.mouseY - rect.top
-        console.log(x, y, brushVars.width, camera.zoom)
         ctx.strokeStyle = 'black'
         ctx.lineWidth = 1
         ctx.beginPath()
@@ -515,7 +515,7 @@ function buildTools({
         input.accept = 'image/*'
         input.onchange = (e) => {
           const file = e.target.files[0]
-          if (!file) return
+          if (!file) { return }
           const reader = new FileReader()
           reader.onload = (event) => {
             const img = new Image()
@@ -581,6 +581,11 @@ function buildTools({
         }
       },
       onmousedown: (event) => {
+        if (!imageVars.image) {
+          setCurrentTool(tools[0]) // 선택 툴로 변경
+          return
+        }
+
         if (event.button === 0 && imageVars.image && imageVars.phase === 'idle') {
           const rect = ensureCanvasRect()
           imageVars.positionX = camera.toWorldX(event.clientX - (rect ? rect.left : 0))
@@ -718,6 +723,7 @@ export function createCanvasController(options) {
   const {
     getMap,
     getCurrentTool,
+    setCurrentTool,
     getCursors,
     getSelectedArea,
     getWs,
@@ -771,6 +777,7 @@ export function createCanvasController(options) {
     getCanvasRect: () => (canvas ? canvas.getBoundingClientRect() : null),
     getSelectedArea,
     getMap,
+    setCurrentTool,
     sendMessage: (message) => {
       const socket = getWs?.()
       if (!socket || !isConnected?.()) return

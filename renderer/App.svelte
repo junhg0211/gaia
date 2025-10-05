@@ -35,6 +35,7 @@
   const canvasController = createCanvasController({
     getMap: () => map,
     getCurrentTool: () => nowTool,
+    setCurrentTool: (tool) => { nowTool = tool },
     getCursors: () => cursors,
     getSelectedArea: () => selectedArea,
     getWs: () => ws,
