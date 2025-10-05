@@ -1165,6 +1165,16 @@ export function createCanvasController(options) {
     ctx.strokeStyle = 'black'
     ctx.lineWidth = 1
     ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
+    const labelUnit = unit >= 1000
+      ? 'km'
+      : unit >= 1
+      ? 'm'
+      : 'cm'
+    const labelValue = unit >= 1000
+      ? (unit / 1000).toFixed(1)
+      : unit >= 1
+      ? unit.toFixed(0)
+      : (unit * 100).toFixed(0)
     for (let i = 0; i < repeats; i++) {
       const xPos = padding + i * scaleBarLength
       ctx.fillStyle = i % 2 === 0 ? 'white' : 'black'
@@ -1173,7 +1183,7 @@ export function createCanvasController(options) {
       ctx.font = '10px Arial'
       ctx.textAlign = 'right'
       ctx.textBaseline = 'bottom'
-      const label = (i + 1) * unit >= 1000 ? `${((i + 1) * unit / 1000).toFixed(0)} km` : `${((i + 1) * unit).toFixed(0)} m`
+      const label = `${(i + 1) * labelValue} ${labelUnit}`
       const textWidth = ctx.measureText(label).width
       ctx.fillStyle = 'white'
       ctx.fillRect(xPos + scaleBarLength - textWidth - 2, yPos - 14, textWidth + 4, 12)
