@@ -293,6 +293,21 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
+  const handleMergeAreasMessage = (data) => {
+    const payload = data.slice(5)
+    const [layerId, areaIds] = payload.split(':')
+    const ids = areaIds.split(',').map((id) => Number(id))
+    if (ids.length < 2) return
+    const map = getMap?.()
+    if (!map) return
+    const layer = map.findLayer(Number(layerId))
+    if (!layer) return
+    layer.mergeAreas(ids)
+    bumpMapUpdate?.()
+    updateCanvas?.()
+    saveMap?.()
+  }
+
   const handleErrorMessage = (data) => {
     const message = data.slice(4)
     addLogEntry?.(`Error from server: ${message}`)
@@ -333,6 +348,8 @@ export function createWebSocketManager({
       handleSetLayerNameMessage(data)
     } else if (data.startsWith('LYOD:')) {
       handleSetLayerOrderMessage(data)
+    } else if (data.startsWith('MERG:')) {
+      handleMergeAreasMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
     }

@@ -89,6 +89,10 @@ function buildTools({
     startY: 0,
   }
 
+  const mergeVars = {
+    area: null,
+  }
+
   const tools = [
     {
       name: '선택',
@@ -967,6 +971,30 @@ function buildTools({
         ctx.fillText(areaStr, screenX, screenY - 5)
       },
     },
+    {
+      name: '영역 합치기',
+      icon: 'link',
+      hotkey: 'g',
+      vars: mergeVars,
+      onstart: () => {
+        mergeVars.area = getSelectedArea()
+        if (!mergeVars.area) {
+          setCurrentTool(tools[0]) // 선택 툴로 변경
+        }
+      },
+      onend: () => {
+        const to = getSelectedArea()
+        if (mergeVars.area && to && mergeVars.area !== to && mergeVars.area.parent === to.parent) {
+          const layer = mergeVars.area.parent
+          const quadtree = layer?.quadtree
+          if (!quadtree) return
+
+          sendMessage("SNAP");
+          sendMessage(`MERG:${layer.id}:${mergeVars.area.id},${to.id}`)
+          console.log(`Merging area ${mergeVars.area.id} into ${to.id}`)
+        }
+      }
+    }
   ]
 
   return tools

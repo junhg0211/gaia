@@ -322,6 +322,20 @@ class Layer {
     return ++layerHighestId;
   }
 
+  mergeAreas(ids) {
+    const validIds = ids.filter(id => id !== 0);
+
+    if (validIds.length === 0) return;
+
+    const targetId = validIds[0];
+    for (let i = 1; i < validIds.length; i++) {
+      const id = validIds[i];
+      this.quadtree.changeValue(id, targetId);
+      this.areas = this.areas.filter(area => area.id !== id);
+    }
+    this.quadtree.tryMerge();
+  }
+
   calculateAreas() {
     const area = {};
     const traverse = (node, bounds) => {

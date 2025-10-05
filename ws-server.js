@@ -773,6 +773,49 @@ async function handleMessage(ws, message) {
     return;
   }
 
+  const MERGE_RE = /^MERG:(\d+):(\d+),(\d+)$/;
+  const mergeMatch = message.match(MERGE_RE);
+  if (mergeMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const layerId = parseInt(mergeMatch[1]);
+    const areaId1 = parseInt(mergeMatch[2]);
+    const areaId2 = parseInt(mergeMatch[3]);
+
+    if (areaId1 === 0 || areaId2 === 0) {
+      ws.send('ERR Cannot merge root area');
+      return;
+    }
+
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    const area1 = map.findArea(areaId1);
+    const area2 = map.findArea(areaId2);
+    if (!area1 || !area2) {
+      ws.send('ERR Invalid area ID(s)');
+      return;
+    }
+    if (area1.parent !== layer && area2.parent !== layer) {
+      ws.send('ERR Areas do not belong to the specified layer');
+      return;
+    }
+
+    layer.mergeAreas([areaId1, areaId2]);
+    ws.send(`OK`);
+
+    const broadcastMessage = `MERG:${layerId}:${areaId1},${areaId2}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
   // If no command matched
   ws.send(`ERR:Unknown command: ${message}`);
 }
