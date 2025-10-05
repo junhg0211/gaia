@@ -199,7 +199,7 @@
 
 <div class="main-container">
   <div class="header">
-    <div>Gaia</div>
+    <div class="spacer"></div>
     {#if connected}
       <div>
         <button on:click={toggleGrid}><i class="bi bi-grid-3x3-gap"></i></button>

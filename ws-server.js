@@ -774,11 +774,12 @@ async function handleMessage(ws, message) {
       ws.send('ERR No snapshots available');
       return;
     }
-    const map = deserializeMapCompact(JSON.parse(snapshots.pop()));
-    if (!map) {
+    const got = deserializeMapCompact(JSON.parse(snapshots.pop()));
+    if (!got) {
       ws.send('ERR Failed to restore snapshot');
       return;
     }
+    map = got;
     const compactPayload = JSON.stringify(serializeMapCompact(map));
     const fallbackPayload = JSON.stringify(serializeMap(map));
     for (const [clientWs] of clients) {

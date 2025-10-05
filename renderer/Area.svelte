@@ -62,7 +62,11 @@
   {/if}
   <div class="area-info">
     <input style="color" color={area.color} type="color" value={area.color} disabled={area.id === 0} on:change={setAreaColor} />
-    <input type="text" value={area.name} on:change={setAreaName} disabled={area.id === 0} />
+    {#if area.id === 0}
+      공백
+    {:else}
+      <input type="text" value={area.name} on:change={setAreaName} disabled={area.id === 0} />
+    {/if}
     <div class="spacer"></div>
     {#if area.id !== 0}
       <button on:click={deleteArea}><i class="bi bi-trash"></i></button>
