@@ -31,6 +31,10 @@
   }
 
   $: isSelected = selectedArea && selectedArea.id === area.id && selectedArea.parent === area.parent;
+
+  function thousandSeparator(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
 </script>
 
 <button class="area-container" class:selected={isSelected} on:click={selectArea}>
@@ -42,6 +46,11 @@
       <button on:click={deleteArea}><i class="bi bi-trash"></i></button>
     {/if}
   </div>
+  {#if area.id !== 0}
+  <div class="smol">
+    Area: {thousandSeparator(area.area)} m²
+  </div>
+  {/if}
 </button>
 
 <style>
@@ -97,5 +106,9 @@
   }
   .area-container button:hover {
     text-decoration: underline;
+  }
+  .smol {
+    font-size: 0.8em;
+    color: #666;
   }
 </style>

@@ -319,6 +319,50 @@ class Layer {
     return ++layerHighestId;
   }
 
+  calculateAreas() {
+    const area = {};
+    const traverse = (node, bounds) => {
+      if (node.isLeaf()) {
+        if (node.value !== 0) {
+          if (!area[node.value]) {
+            area[node.value] = 0;
+          }
+          area[node.value] += (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY);
+        }
+        return;
+      }
+
+      const midX = (bounds.minX + bounds.maxX) / 2;
+      const midY = (bounds.minY + bounds.maxY) / 2;
+      const childBounds = [
+        { minX: bounds.minX, minY: bounds.minY, maxX: midX, maxY: midY },
+        { minX: midX, minY: bounds.minY, maxX: bounds.maxX, maxY: midY },
+        { minX: bounds.minX, minY: midY, maxX: midX, maxY: bounds.maxY },
+        { minX: midX, minY: midY, maxX: bounds.maxX, maxY: bounds.maxY },
+      ];
+
+      for (let i = 0; i < 4; i++) {
+        const child = node.getChild(i);
+        if (child) {
+          traverse(child, childBounds[i]);
+        }
+      }
+    };
+
+    const bounds = this.getBounds();
+    traverse(this.quadtree, bounds);
+    for (const areaObj of this.areas) {
+      areaObj.area = area[areaObj.id] || 0;
+    }
+  }
+
+  calculateAllAreas() {
+    this.calculateAreas();
+    for (const child of this.children) {
+      child.calculateAllAreas();
+    }
+  }
+
   expandTo(x, y) {
     const [px, py] = this.pos;
     const [sx, sy] = this.size;
@@ -547,6 +591,7 @@ class Area {
     this.color = color;
     this.parent = parent;
     this.name = name;
+    this.area = 0;
 
     if (this.id === undefined || this.id === null) {
       this.id = Area.getNextId();

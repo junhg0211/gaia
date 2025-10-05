@@ -32,6 +32,7 @@ export function createWebSocketManager({
     const mapData = data.slice(4)
     const parsed = deserializeMap(JSON.parse(mapData))
     setMap(parsed)
+    parsed.layer.calculateAllAreas()
     updateCanvas?.()
   }
 
@@ -39,6 +40,7 @@ export function createWebSocketManager({
     const payload = data.slice(5)
     const parsed = deserializeMapCompact(JSON.parse(payload))
     setMap(parsed)
+    parsed.layer.calculateAllAreas()
     updateCanvas?.()
   }
 
@@ -92,6 +94,8 @@ export function createWebSocketManager({
     const depth = Math.log2(layer.size[0] / precision)
     layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds)
     layer.cleanup()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
     updateCanvas?.()
   }
 
@@ -147,6 +151,8 @@ export function createWebSocketManager({
       bounds,
     )
     layer.cleanup()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
     updateCanvas?.()
   }
 
@@ -197,6 +203,8 @@ export function createWebSocketManager({
     const depth = Math.log2(layer.size[0] / precision)
     layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds)
     layer.cleanup()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
     updateCanvas?.()
   }
 
@@ -219,6 +227,8 @@ export function createWebSocketManager({
     const layer = map.findLayer(layerId)
     if (!layer) return
     layer.floodFill(x, y, areaId, precision)
+    layer.cleanup()
+    layer.calculateAreas()
     bumpMapUpdate?.()
     updateCanvas?.()
   }

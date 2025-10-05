@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { loadMapFromFile, saveMapToFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { Map, Layer, Area, Quadtree, serializeMap, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
+import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
 
 const PORT = 48829;
 const wss = new WebSocketServer({
@@ -43,7 +43,7 @@ let map;
 if (fs.existsSync('map.gaia')) {
   map = loadMapFromFile('map.gaia');
 } else {
-  map = new Map("Gaia", new Layer(null, new Quadtree(0), null, [0, 0], [1, 1], "Root Layer"));
+  map = new GaiaMap("Gaia", new Layer(null, new Quadtree(0), null, [0, 0], [1, 1], "Root Layer"));
 }
 
 const clients = new Set();
@@ -759,7 +759,7 @@ async function handleMessage(ws, message) {
       return;
     }
     const snapshot = snapshots.pop();
-    map = Map.fromJSON(JSON.parse(snapshot));
+    map = GaiaMap.fromJSON(JSON.parse(snapshot));
     const compactPayload = JSON.stringify(serializeMapCompact(map));
     const fallbackPayload = JSON.stringify(serializeMap(map));
     for (const [clientWs] of clients) {
