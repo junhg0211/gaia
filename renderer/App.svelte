@@ -207,8 +207,7 @@
       {#each tools as tool}
       <div class="tool-button">
         <button title={tool.name} disabled={nowTool === tool} on:click={selectTool(tool)}>
-          <i class="bi bi-{tool.icon}"></i>
-          <!-- {tool.name} ({tool.hotkey.toUpperCase()}) -->
+          <i class="bi bi-{tool.icon}"></i> {tool.hotkey.toUpperCase()}
         </button>
       </div>
       {/each}
