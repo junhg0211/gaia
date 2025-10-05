@@ -71,10 +71,12 @@
   {#if unfold && visible}
   <div>
     <div class="add-area-inputs">
-      <button on:click={deleteLayer}><i class="bi bi-trash"></i></button>
       <button on:click={addArea}><i class="bi bi-palette2"></i></button>
+      {#if layer.parent}
       <button on:click={upLayer}><i class="bi bi-arrow-up"></i></button>
       <button on:click={downLayer}><i class="bi bi-arrow-down"></i></button>
+      <button on:click={deleteLayer}><i class="bi bi-trash"></i></button>
+      {/if}
     </div>
     <div class="opacity-bar">
       <input type="range" min="0" max="1" step="0.01" bind:value={layer.opacity} on:input={updateCanvas} />
@@ -120,5 +122,24 @@
   }
   .child-layers {
     margin-top: 8px;
+  }
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+  }
+  button:hover {
+    background-color: #f0f0f0;
+  }
+  input[type="text"] {
+    border: none;
+    background: none;
+    font-size: 1em;
+    width: 100px;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-bottom: 1px solid #ccc;
   }
 </style>

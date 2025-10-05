@@ -33,7 +33,7 @@
   $: isSelected = selectedArea && selectedArea.id === area.id && selectedArea.parent === area.parent;
 
   function thousandSeparator(x) {
-    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    return x.toFixed(3).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 </script>
 
@@ -48,7 +48,7 @@
   </div>
   {#if area.id !== 0}
   <div class="smol">
-    Area: {thousandSeparator(area.area)} m²
+    #{area.id} | {thousandSeparator(area.area)} m²
   </div>
   {/if}
 </button>
