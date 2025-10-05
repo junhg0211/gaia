@@ -844,6 +844,99 @@ function buildTools({
         }
       }
     },
+    {
+      name: '다각형 넓이 측정',
+      icon: 'beaker',
+      hotkey: 'o',
+      vars: polygonVars,
+      onstart: () => {
+        polygonVars.points = []
+        polygonVars.toX = 0
+        polygonVars.toY = 0
+        polygonVars.brushing = false
+      },
+      onmouseup: (event) => {
+        if (event.button === 0) {
+          if (!polygonVars.brushing) {
+            polygonVars.points = []
+            polygonVars.brushing = true
+          }
+          polygonVars.points.push({ x: event.clientX, y: event.clientY })
+          updateCanvas()
+        }
+      },
+      onmousemove: (event) => {
+        if (!polygonVars.brushing) return
+        polygonVars.toX = event.clientX
+        polygonVars.toY = event.clientY
+        updateCanvas()
+      },
+      render: (ctx) => {
+        if (!polygonVars.brushing || polygonVars.points.length === 0) return
+        const rect = ensureCanvasRect()
+        if (!rect) return
+        ctx.strokeStyle = 'blue'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(polygonVars.points[0].x - rect.left, polygonVars.points[0].y - rect.top)
+        for (let i = 1; i < polygonVars.points.length; i += 1) {
+          ctx.lineTo(polygonVars.points[i].x - rect.left, polygonVars.points[i].y - rect.top)
+        }
+        ctx.lineTo(polygonVars.toX - rect.left, polygonVars.toY - rect.top)
+        ctx.stroke()
+
+        for (const point of polygonVars.points) {
+          ctx.fillStyle = 'blue'
+          ctx.beginPath()
+          ctx.arc(point.x - rect.left, point.y - rect.top, 5, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        if (polygonVars.points.length < 3) return
+
+        const worldPoints = polygonVars.points.map((point) => {
+          const wp = toWorldPoint(point.x, point.y)
+          return wp ? { x: wp.x, y: wp.y } : null
+        }).filter(Boolean)
+        if (worldPoints.length !== polygonVars.points.length) return
+
+        let area = 0
+        for (let i = 0; i < worldPoints.length; i++) {
+          const j = (i + 1) % worldPoints.length
+          area += worldPoints[i].x * worldPoints[j].y
+          area -= worldPoints[j].x * worldPoints[i].y
+        }
+        area = Math.abs(area) / 2
+
+        ctx.beginPath()
+        ctx.moveTo(polygonVars.points[0].x - rect.left, polygonVars.points[0].y - rect.top)
+        for (let i = 1; i < polygonVars.points.length; i += 1) {
+          ctx.lineTo(polygonVars.points[i].x - rect.left, polygonVars.points[i].y - rect.top)
+        }
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(0, 0, 255, 0.1)'
+        ctx.fill()
+
+        // 화면에 넓이 표시
+        const centroid = worldPoints.reduce((acc, point) => ({
+          x: acc.x + point.x / worldPoints.length,
+          y: acc.y + point.y / worldPoints.length,
+        }), { x: 0, y: 0 })
+        const screenX = camera.toScreenX(centroid.x)
+        const screenY = camera.toScreenY(centroid.y)
+
+        ctx.font = '14px Arial'
+        const areaStr = area >= 1e6 ? `${(area / 1e6).toFixed(2)} km²` : `${area.toFixed(2)} m²`
+        const textwidth = ctx.measureText(areaStr).width
+        ctx.fillStyle = 'white'
+        ctx.fillRect(screenX - textwidth / 2 - 4, screenY - 20, textwidth + 8, 16)
+
+        ctx.fillStyle = 'black'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        ctx.fillText(areaStr, screenX, screenY - 5)
+      },
+    },
   ]
 
   return tools
