@@ -816,6 +816,83 @@ async function handleMessage(ws, message) {
     return;
   }
 
+  const ADDCLIP_RE = /^ADDCLIP:(.+):(.+)$/;
+  const addClipMatch = message.match(ADDCLIP_RE);
+  if (addClipMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const area = addClipMatch[1].trim();
+    const clipArea = addClipMatch[2].trim();
+
+    if (!area || !clipArea) {
+      ws.send('ERR Invalid area or clipArea');
+      return;
+    }
+
+    const targetArea = map.findArea(parseInt(area));
+    if (!targetArea) {
+      ws.send('ERR Area not found');
+      return;
+    }
+
+    if (area.parent !== targetArea.parent) {
+      ws.send('ERR Area does not belong to a layer');
+      return;
+    }
+
+    if (targetArea.clipAreas.includes(clipArea)) {
+      ws.send('ERR Clip area already exists');
+      return;
+    }
+    targetArea.clipAreas.push(clipArea);
+    ws.send(`OK Added clip area`);
+
+    const broadcastMessage = `ADDCLIP:${area}:${clipArea}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const REMOVECLIP_RE = /^REMCLIP:(.+):(.+)$/;
+  const removeClipMatch = message.match(REMOVECLIP_RE);
+  if (removeClipMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const area = removeClipMatch[1].trim();
+    const clipArea = removeClipMatch[2].trim();
+
+    if (!area || !clipArea) {
+      ws.send('ERR Invalid area or clipArea');
+      return;
+    }
+
+    const targetArea = map.findArea(parseInt(area));
+    if (!targetArea) {
+      ws.send('ERR Area not found');
+      return;
+    }
+
+    const clipAreaInt = parseInt(clipArea);
+    const index = targetArea.clipAreas.indexOf(clipAreaInt);
+    if (index === -1) {
+      ws.send('ERR Clip area not found');
+      return;
+    }
+    targetArea.clipAreas.splice(index, 1);
+    ws.send(`OK Removed clip area`);
+
+    const broadcastMessage = `REMCLIP:${area}:${clipArea}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
   // If no command matched
   ws.send(`ERR:Unknown command: ${message}`);
 }

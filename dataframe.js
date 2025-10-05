@@ -187,6 +187,7 @@ class Map {
   }
 
   findArea(id) {
+    id = Number(id);
     const searchArea = (layer, id) => {
       for (const area of layer.areas) {
         if (area.id === id) return area;
@@ -673,6 +674,7 @@ class Area {
     this.parent = parent;
     this.name = name;
     this.area = 0;
+    this.clipAreas = [];
 
     if (this.id === undefined || this.id === null) {
       this.id = Area.getNextId();
@@ -983,6 +985,7 @@ function serializeArea(area) {
     id: area.id,
     color: area.color,
     name: area.name,
+    clipAreas: area.clipAreas,
   };
 }
 
@@ -1167,7 +1170,9 @@ function deserializeLayerCompact(data, parent = null) {
 }
 
 function deserializeArea(data, parent) {
-  return new Area(data.id, data.color, parent, data.name);
+  const area = new Area(parseInt(data.id), data.color, parent, data.name);
+  area.clipAreas = Array.isArray(data.clipAreas) ? data.clipAreas.map(id => parseInt(id)) : [];
+  return area;
 }
 
 function deserializeLayer(data, parent = null) {

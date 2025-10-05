@@ -10,7 +10,6 @@
 
   function selectArea() {
     dispatch('areaselect', { area });
-    console.log('Area selected:', area);
   }
 
   async function deleteArea() {
@@ -35,9 +34,32 @@
   function thousandSeparator(x) {
     return x.toFixed(3).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
+
+  function addClipArea(event) {
+    if (event.key === 'Enter') {
+      const clip = event.target.value.trim();
+      if (clip) {
+        ws.send(`ADDCLIP:${area.id}:${clip}`);
+        event.target.value = '';
+      }
+    }
+  }
+
+  function removeClipArea(clip) {
+    return () => ws.send(`REMCLIP:${area.id}:${clip}`);
+  }
 </script>
 
-<button class="area-container" class:selected={isSelected} on:click={selectArea}>
+<button class="area-container" class:selected={isSelected} on:click={selectArea}> {#if area.id !== 0}
+  <div class="smol clip-areas">
+    <i class="bi bi-paperclip"></i>
+    {#each area.clipAreas as clip}
+      <button on:click={removeClipArea(clip)}>{clip}</button>
+    {/each}
+    <input type="text" on:keydown={addClipArea} />
+    <div class="spacer"></div>
+  </div>
+  {/if}
   <div class="area-info">
     <input style="color" color={area.color} type="color" value={area.color} disabled={area.id === 0} on:change={setAreaColor} />
     <input type="text" value={area.name} on:change={setAreaName} disabled={area.id === 0} />
@@ -48,7 +70,7 @@
   </div>
   {#if area.id !== 0}
   <div class="smol">
-    #{area.id} | {thousandSeparator(area.area)} m²
+    #{area.id}, {thousandSeparator(area.area)} m²
   </div>
   {/if}
 </button>
@@ -110,5 +132,29 @@
   .smol {
     font-size: 0.8em;
     color: #666;
+  }
+  .clip-areas {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .clip-areas button {
+    color: #007bff;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .clip-areas button:hover {
+    text-decoration: underline;
+  }
+  .clip-areas input {
+    border: none;
+    background: none;
+    font-size: 0.8em;
+    width: 60px;
+  }
+  .clip-areas input:focus {
+    outline: none;
+    border-bottom: 1px solid #ccc;
   }
 </style>

@@ -308,6 +308,36 @@ export function createWebSocketManager({
     saveMap?.()
   }
 
+  const handleAddClipMessage = (data) => {
+    const payload = data.slice(8)
+    const [areaIdStr, clipAreaIdStr] = payload.split(':')
+    const areaId = Number(areaIdStr)
+    const clipAreaId = Number(clipAreaIdStr)
+    const map = getMap?.()
+    if (!map) return
+    const area = map.findArea(areaId)
+    const clipArea = map.findArea(clipAreaId)
+    if (!area || !clipArea) return
+    if (area.clipAreas.find((a) => a.id === clipAreaId)) return
+    area.clipAreas.push(clipArea.id)
+    bumpMapUpdate?.()
+  }
+
+  const handleRemoveClipMessage = (data) => {
+    const payload = data.slice(8)
+    const [areaIdStr, clipAreaIdStr] = payload.split(':')
+    const areaId = Number(areaIdStr)
+    const clipAreaId = Number(clipAreaIdStr)
+    const map = getMap?.()
+    if (!map) return
+    const area = map.findArea(areaId)
+    if (!area) return
+    const index = area.clipAreas.indexOf(clipAreaId)
+    if (index === -1) return
+    area.clipAreas.splice(index, 1)
+    bumpMapUpdate?.()
+  }
+
   const handleErrorMessage = (data) => {
     const message = data.slice(4)
     addLogEntry?.(`Error from server: ${message}`)
@@ -350,6 +380,10 @@ export function createWebSocketManager({
       handleSetLayerOrderMessage(data)
     } else if (data.startsWith('MERG:')) {
       handleMergeAreasMessage(data)
+    } else if (data.startsWith('ADDCLIP:')) {
+      handleAddClipMessage(data)
+    } else if (data.startsWith('REMCLIP:')) {
+      handleRemoveClipMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
     }
