@@ -1,6 +1,8 @@
 {
   "name": "gaia",
-  "version": "1.0.0",
+  "version": "0.0.0",
+  "author": "Zasoque Scîe",
+  "description": "Mapping tool for infinite worlds",
   "type": "module",
   "main": "index.js",
   "scripts": {

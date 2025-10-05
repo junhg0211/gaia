@@ -6,7 +6,38 @@ import fs from 'fs';
 import { Map, Layer, Area, Quadtree, serializeMap, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
 
 const PORT = 48829;
-const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
+const wss = new WebSocketServer({
+  port: PORT,
+  host: '0.0.0.0',
+  maxPayload: 512 * 1024 * 1024,
+});
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+const heartbeatInterval = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.CLOSING || ws.readyState === ws.CLOSED) {
+      continue;
+    }
+    if (ws.isAlive === false) {
+      console.warn('Terminating unresponsive client');
+      ws.terminate();
+      continue;
+    }
+
+    ws.isAlive = false;
+    try {
+      ws.ping();
+    } catch (error) {
+      console.warn('Failed to ping client', error);
+      ws.terminate();
+    }
+  }
+}, HEARTBEAT_INTERVAL_MS);
+
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
+});
 
 let map;
 if (fs.existsSync('map.gaia')) {
@@ -753,8 +784,25 @@ wss.on('connection', (ws, req) => {
   const clientIP = req.socket.remoteAddress;
   console.log(`🔗 Client connected: ${clientIP}`);
 
+  if (ws._socket && typeof ws._socket.setKeepAlive === 'function') {
+    ws._socket.setKeepAlive(true, HEARTBEAT_INTERVAL_MS);
+  }
+  if (ws._socket && typeof ws._socket.setTimeout === 'function') {
+    ws._socket.setTimeout(0);
+  }
+
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
+  ws.on('error', (error) => {
+    console.warn('WebSocket client error', error);
+  });
+
   // 메시지 수신 처리
   ws.on('message', (data) => {
+    ws.isAlive = true;
     try {
       const message = data.toString();
       handleMessage(ws, message);
