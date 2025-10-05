@@ -172,6 +172,11 @@
   const data = {
     updateCanvas: redrawCanvas,
   }
+
+  function undoMap() {
+    if (!connected || !ws) return
+    ws.send('UNDO')
+  }
 </script>
 
 <svelte:head>
@@ -191,6 +196,7 @@
     <div>Gaia</div>
     {#if connected}
       <div>
+        <button on:click={undoMap}><i class="bi bi-arrow-counterclockwise"></i></button>
         <button on:click={saveMap}><i class="bi bi-floppy"></i></button>
         <button on:click={reloadMap}><i class="bi bi-arrow-clockwise"></i></button>
       </div>

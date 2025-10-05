@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { loadMapFromFile, saveMapToFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
+import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, deserializeMapCompact, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
 
 const PORT = 48829;
 const wss = new WebSocketServer({
@@ -755,7 +755,7 @@ async function handleMessage(ws, message) {
       ws.send('ERR Not logged in');
       return;
     }
-    const snapshot = JSON.stringify(serializeMap(map));
+    const snapshot = JSON.stringify(serializeMapCompact(map));
     snapshots.push(snapshot);
     ws.send(`OK Snapshot taken`);
     while (snapshots.length > 200) {
@@ -774,8 +774,11 @@ async function handleMessage(ws, message) {
       ws.send('ERR No snapshots available');
       return;
     }
-    const snapshot = snapshots.pop();
-    map = GaiaMap.fromJSON(JSON.parse(snapshot));
+    const map = deserializeMapCompact(JSON.parse(snapshots.pop()));
+    if (!map) {
+      ws.send('ERR Failed to restore snapshot');
+      return;
+    }
     const compactPayload = JSON.stringify(serializeMapCompact(map));
     const fallbackPayload = JSON.stringify(serializeMap(map));
     for (const [clientWs] of clients) {
