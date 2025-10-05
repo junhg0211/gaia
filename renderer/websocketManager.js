@@ -92,7 +92,9 @@ export function createWebSocketManager({
     const [sx, sy] = layer.size ?? [1, 1]
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const depth = Math.log2(layer.size[0] / precision)
-    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds)
+    const targetArea = map.findArea(areaId)
+    const clipAreas = targetArea?.clipAreas ?? []
+    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipAreas)
     layer.cleanup()
     layer.calculateAreas()
     bumpMapUpdate?.()
@@ -141,6 +143,8 @@ export function createWebSocketManager({
     const [sx, sy] = layer.size ?? [1, 1]
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const depth = Math.log2(layer.size[0] / precision)
+    const targetArea = map.findArea(parsedAreaId)
+    const clipAreas = targetArea?.clipAreas ?? []
     layer.quadtree.drawRect(
       Math.min(x1, x2),
       Math.min(y1, y2),
@@ -149,6 +153,7 @@ export function createWebSocketManager({
       parsedAreaId,
       depth,
       bounds,
+      clipAreas,
     )
     layer.cleanup()
     layer.calculateAreas()
@@ -201,7 +206,9 @@ export function createWebSocketManager({
       newPoints.push([points[i], points[i + 1]])
     }
     const depth = Math.log2(layer.size[0] / precision)
-    layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds)
+    const targetArea = map.findArea(parsedAreaId)
+    const clipAreas = targetArea?.clipAreas ?? []
+    layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds, undefined, clipAreas)
     layer.cleanup()
     layer.calculateAreas()
     bumpMapUpdate?.()

@@ -746,14 +746,37 @@ class Quadtree {
     }
   }
 
-  drawCircle(x, y, radius, value, depth = 11, bounds) {
+  canFillEntireNode(clipAreas) {
+    if (!clipAreas || clipAreas.length === 0) return true;
+    if (this.isLeaf()) return clipAreas.includes(this.value);
+    if (!this.children || this.children.length !== 4) {
+      return clipAreas.includes(this.value);
+    }
+    for (const child of this.children) {
+      if (!child.canFillEntireNode(clipAreas)) return false;
+    }
+    return true;
+  }
+
+  drawCircle(x, y, radius, value, depth = 11, bounds, clipAreas = []) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
     if (!circleIntersectsRect(x, y, radius, nodeBounds)) return;
 
-    if (circleContainsRect(x, y, radius, nodeBounds) || depth <= 0) {
-      this.set(value);
-      return;
+    const fullyCovered = circleContainsRect(x, y, radius, nodeBounds);
+
+    if (fullyCovered || depth <= 0) {
+      if (this.canFillEntireNode(clipAreas)) {
+        this.set(value);
+        return;
+      }
+      if (this.isLeaf()) {
+        if (clipAreas.length === 0 || clipAreas.includes(this.value)) this.set(value);
+        return;
+      }
+      if (depth <= 0) {
+        // depth limit reached; reuse existing children
+      }
     }
 
     this.divide();
@@ -771,28 +794,49 @@ class Quadtree {
     for (let i = 0; i < 4; i++) {
       const childBound = childBounds[i];
       if (!circleIntersectsRect(x, y, radius, childBound)) continue;
-      this.children[i].drawCircle(x, y, radius, value, depth - 1, childBound);
+      this.children[i].drawCircle(x, y, radius, value, depth - 1, childBound, clipAreas);
     }
 
     this.tryMerge();
   }
 
-  drawPolygon(points, value, depth = 11, bounds, polygonBoundsCache) {
+  drawPolygon(points, value, depth = 11, bounds, polygonBoundsCache, clipAreas = []) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     const polyBounds = polygonBoundsCache ?? polygonBounds(points);
 
     if (!rectsOverlap(nodeBounds, polyBounds)) return;
 
-    if (polygonContainsRect(points, nodeBounds)) {
-      this.set(value);
+    const fullyCovered = polygonContainsRect(points, nodeBounds);
+
+    if (fullyCovered) {
+      if (this.canFillEntireNode(clipAreas)) {
+        this.set(value);
+        return;
+      }
+      if (this.isLeaf()) {
+        if (clipAreas.length === 0 || clipAreas.includes(this.value)) {
+          this.set(value);
+        }
+        return;
+      }
+    }
+
+    const intersects = polygonIntersectsRect(points, nodeBounds, polyBounds);
+    if (!intersects) {
       return;
     }
 
     if (depth <= 0) {
-      if (polygonIntersectsRect(points, nodeBounds, polyBounds)) {
+      if (this.canFillEntireNode(clipAreas)) {
         this.set(value);
+        return;
       }
-      return;
+      if (this.isLeaf()) {
+        if (clipAreas.length === 0 || clipAreas.includes(this.value)) {
+          this.set(value);
+        }
+        return;
+      }
     }
 
     const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
@@ -817,7 +861,7 @@ class Quadtree {
         subdivided = true;
       }
 
-      this.children[i].drawPolygon(points, value, depth - 1, childBound, polyBounds);
+      this.children[i].drawPolygon(points, value, depth - 1, childBound, polyBounds, clipAreas);
     }
 
     if (subdivided) {
@@ -826,11 +870,11 @@ class Quadtree {
     }
   }
 
-  drawLine(x1, y1, x2, y2, width, value, depth = 11, bounds) {
+  drawLine(x1, y1, x2, y2, width, value, depth = 11, bounds, clipAreas = []) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
-    this.drawCircle(x1, y1, width / 2, value, depth, nodeBounds);
-    this.drawCircle(x2, y2, width / 2, value, depth, nodeBounds);
+    this.drawCircle(x1, y1, width / 2, value, depth, nodeBounds, clipAreas);
+    this.drawCircle(x2, y2, width / 2, value, depth, nodeBounds, clipAreas);
 
     const dx = x2 - x1;
     const dy = y2 - y1;
@@ -857,7 +901,7 @@ class Quadtree {
       ];
     }
 
-    return this.drawPolygon(points, value, depth, nodeBounds);
+    return this.drawPolygon(points, value, depth, nodeBounds, undefined, clipAreas);
   }
 
   expandBeing(index) {
@@ -906,14 +950,14 @@ class Quadtree {
     this.markDirty();
   }
 
-  drawRect(minX, minY, maxX, maxY, value, depth = 11, bounds) {
+  drawRect(minX, minY, maxX, maxY, value, depth = 11, bounds, clipAreas = []) {
     const points = [
       [minX, minY],
       [maxX, minY],
       [maxX, maxY],
       [minX, maxY],
     ];
-    return this.drawPolygon(points, value, depth, bounds);
+    return this.drawPolygon(points, value, depth, bounds, undefined, clipAreas);
   }
 
   getValueAt(x, y, depth = 11, bounds) {

@@ -262,7 +262,19 @@ async function handleMessage(ws, message) {
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
     const depth = Math.log2(layer.size[0] / precision);
-    layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, depth, bounds);
+    const targetArea = map.findArea(color);
+    const clipAreas = targetArea?.clipAreas ?? [];
+    layer.quadtree.drawLine(
+      x1,
+      y1,
+      x2,
+      y2,
+      brushSize,
+      color,
+      depth,
+      bounds,
+      clipAreas
+    );
     layer.cleanup();
 
     const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}:${precision}`;
@@ -521,7 +533,9 @@ async function handleMessage(ws, message) {
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
     const depth = Math.log2(layer.size[0] / precision);
-    layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds);
+    const targetArea = map.findArea(color);
+    const clipAreas = targetArea?.clipAreas ?? [];
+    layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds, clipAreas);
     layer.cleanup();
 
     if (boardcasting) {
@@ -681,7 +695,9 @@ async function handleMessage(ws, message) {
 
     const depth = Math.log2(layer.size[0] / precision);
     console.log(depth)
-    layer.quadtree.drawPolygon(newPoints, color, depth, bounds);
+    const targetArea = map.findArea(color);
+    const clipAreas = targetArea?.clipAreas ?? [];
+    layer.quadtree.drawPolygon(newPoints, color, depth, bounds, undefined, clipAreas);
     layer.cleanup();
 
     const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;

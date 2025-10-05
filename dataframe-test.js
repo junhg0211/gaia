@@ -141,6 +141,39 @@ const tests = [
     },
   },
   {
+    name: 'Quadtree drawRect respects clip area whitelist',
+    run: () => {
+      const tree = new Quadtree(0);
+      tree.divide();
+      tree.children[0].set(1);
+      tree.children[1].set(2);
+      tree.children[2].set(3);
+      tree.children[3].set(4);
+
+      const bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+      tree.drawRect(0, 0, 1, 1, 9, 4, bounds, [2, 4]);
+
+      assert.equal(tree.children[0].value, 1);
+      assert.equal(tree.children[1].value, 9);
+      assert.equal(tree.children[2].value, 3);
+      assert.equal(tree.children[3].value, 9);
+    },
+  },
+  {
+    name: 'Quadtree drawRect skips disallowed clip targets',
+    run: () => {
+      const tree = new Quadtree(5);
+      const bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+      tree.drawRect(0, 0, 1, 1, 9, 0, bounds, [3, 4]);
+      assert.equal(tree.value, 5);
+
+      tree.drawRect(0, 0, 1, 1, 9, 0, bounds, [5]);
+      assert.equal(tree.value, 9);
+    },
+  },
+  {
     name: 'Quadtree preserves polygons when expanding bounds',
     run: () => {
       const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [1, 1], 'poly-layer');
