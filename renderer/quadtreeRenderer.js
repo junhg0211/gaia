@@ -189,7 +189,7 @@ function drawNodeAdaptive({
   canvas,
   camera,
   areaColors,
-  maxDepth = 24,
+  maxDepth = 32,
 }) {
   if (!node || !ctx || !canvas) return
 
