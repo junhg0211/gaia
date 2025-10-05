@@ -164,15 +164,20 @@ function buildTools({
         }
       },
       onmousemove: (event) => {
-        if (event.button !== 0) return
-        if (!lineVars.brushing) return
-        lineVars.toX = event.clientX
-        lineVars.toY = event.clientY
-        updateCanvas()
+        if (lineVars.brushing) {
+          if (event.button !== 0) return
+          lineVars.toX = event.clientX
+          lineVars.toY = event.clientY
+          updateCanvas()
+        } else {
+          lineVars.x = event.clientX
+          lineVars.y = event.clientY
+          updateCanvas()
+        }
       },
       onmouseup: (event) => {
-        if (event.button !== 0) return
         if (!lineVars.brushing) return
+        if (event.button !== 0) return
         lineVars.brushing = false
         const selectedArea = getSelectedArea()
         const canvas = getCanvas()
@@ -183,24 +188,58 @@ function buildTools({
         const precision = 1 / camera.zoom;
         sendMessage("SNAP");
         sendMessage(`LINE:${selectedArea.parent.id}:${fromWorld.x},${fromWorld.y}:${toWorld.x},${toWorld.y}:${selectedArea.id},${lineVars.width}:${precision}`)
+        lineVars.x = event.clientX
+        lineVars.y = event.clientY
         updateCanvas()
       },
       onwheel: () => {},
       render: (ctx) => {
-        if (!lineVars.brushing) return
-        const rect = ensureCanvasRect()
-        if (!rect) return
-        const startX = lineVars.x - rect.left
-        const startY = lineVars.y - rect.top
-        const endX = lineVars.toX - rect.left
-        const endY = lineVars.toY - rect.top
-        ctx.strokeStyle = 'blue'
-        ctx.lineWidth = lineVars.width * camera.zoom
-        ctx.beginPath()
-        ctx.moveTo(startX, startY)
-        ctx.lineTo(endX, endY)
-        ctx.stroke()
+        if (lineVars.brushing) {
+          const rect = ensureCanvasRect()
+          if (!rect) return
+          const startX = lineVars.x - rect.left
+          const startY = lineVars.y - rect.top
+          const endX = lineVars.toX - rect.left
+          const endY = lineVars.toY - rect.top
+          ctx.fillStyle = 'blue'
+          ctx.beginPath()
+          ctx.arc(startX, startY, lineVars.width * camera.zoom / 2, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.beginPath()
+          ctx.arc(endX, endY, lineVars.width * camera.zoom / 2, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = 'blue'
+          ctx.lineWidth = lineVars.width * camera.zoom
+          ctx.beginPath()
+          ctx.moveTo(startX, startY)
+          ctx.lineTo(endX, endY)
+          ctx.stroke()
+        } else {
+          const rect = ensureCanvasRect()
+          if (!rect) return
+          const x = lineVars.x - rect.left
+          const y = lineVars.y - rect.top
+          ctx.strokeStyle = 'black'
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(x - 10, y)
+          ctx.lineTo(x + 10, y)
+          ctx.moveTo(x, y - 10)
+          ctx.lineTo(x, y + 10)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(x, y, lineVars.width * camera.zoom / 2, 0, Math.PI * 2)
+          ctx.stroke()
+        }
       },
+      onkeydown: (event) => {
+        if (event.key === '[') {
+          lineVars.width = Math.max(1, lineVars.width - 1)
+        } else if (event.key === ']') {
+          lineVars.width = Math.min(100, lineVars.width + 1)
+        }
+        updateCanvas()
+      }
     },
     {
       name: '사각형',
