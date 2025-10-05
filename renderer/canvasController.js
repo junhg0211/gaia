@@ -1,5 +1,6 @@
 import { tick } from 'svelte'
 import { Area, serializeLayerCompact } from '../dataframe.js'
+import { createMapRenderer } from './quadtreeRenderer.js'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
@@ -999,6 +1000,8 @@ export function createCanvasController(options) {
     initialCameraY: 0,
   }
 
+  const mapRenderer = createMapRenderer()
+
   const camera = {
     x: 0,
     y: 0,
@@ -1068,7 +1071,7 @@ export function createCanvasController(options) {
 
     const map = getMap?.()
     if (map) {
-      map.draw(ctx, canvas, camera)
+      mapRenderer.draw(map, ctx, canvas, camera)
     }
 
     let unit = 0.1

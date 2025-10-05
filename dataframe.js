@@ -307,6 +307,9 @@ class Layer {
     this.name = name;
     this.areas = [new Area(0, 'transparent', this, 'None')];
     this.children = [];
+    if (this.quadtree) {
+      this.quadtree.parent = null;
+    }
 
     if (this.id === undefined || this.id === null) {
       this.id = Layer.getNextId();
@@ -432,6 +435,9 @@ class Layer {
     this.size = [halfSx, halfSy];
     this.quadtree = nonEmptyChildren[0];
     this.quadtree.parent = null;
+    if (typeof this.quadtree.markDirty === 'function') {
+      this.quadtree.markDirty();
+    }
 
     this.cleanup();
   }
@@ -610,10 +616,18 @@ class Quadtree {
     this.value = value;
     this.parent = parent;
     this.children = null;
+    this.version = 0;
   }
 
   isLeaf() {
     return this.children === null;
+  }
+
+  markDirty() {
+    this.version = (this.version || 0) + 1;
+    if (this.parent && typeof this.parent.markDirty === 'function') {
+      this.parent.markDirty();
+    }
   }
 
   divide() {
@@ -625,6 +639,7 @@ class Quadtree {
       new Quadtree(this.value, this),
       new Quadtree(this.value, this),
     ];
+    this.markDirty();
   }
 
   getChild(index) {
@@ -633,8 +648,12 @@ class Quadtree {
   }
 
   set(value) {
+    const valueChanged = this.value !== value || !this.isLeaf();
     this.value = value;
     this.children = null;
+    if (valueChanged) {
+      this.markDirty();
+    }
   }
 
   tryMerge() {
@@ -726,6 +745,7 @@ class Quadtree {
 
     if (subdivided) {
       this.tryMerge();
+      this.markDirty();
     }
   }
 
@@ -793,6 +813,7 @@ class Quadtree {
     ];
     this.children[index] = preservedChild;
     this.value = 0;
+    this.markDirty();
   }
 
   changeValue(oldValue, newValue) {
@@ -805,6 +826,7 @@ class Quadtree {
 
     this.children.forEach(child => child.changeValue(oldValue, newValue));
     this.tryMerge();
+    this.markDirty();
   }
 
   drawRect(minX, minY, maxX, maxY, value, depth = 11, bounds) {
