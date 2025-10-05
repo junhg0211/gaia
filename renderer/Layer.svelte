@@ -53,7 +53,7 @@
 
   let visible = true;
   $: {
-    layer.visible = unfold && visible;
+    layer.visible = visible;
     updateCanvas();
   }
 

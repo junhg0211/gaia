@@ -1,8 +1,15 @@
 import { promises as fsPromises, readFileSync } from 'node:fs';
-import { Map, serializeMap, deserializeMap, setAreaHighestId, setLayerHighestId } from './dataframe.js';
+import {
+  Map,
+  serializeMapCompact,
+  deserializeMap,
+  deserializeMapCompact,
+  setAreaHighestId,
+  setLayerHighestId,
+} from './dataframe.js';
 import path from 'node:path';
 
-async function saveMapToFile(map, filename) {
+async function saveMapToFile(map, filename, options = {}) {
   if (!(map instanceof Map)) {
     throw new TypeError('Expected map to be an instance of Map');
   }
@@ -11,8 +18,9 @@ async function saveMapToFile(map, filename) {
     throw new TypeError('Filename must be a non-empty string');
   }
 
-  const serialized = serializeMap(map);
-  const contents = JSON.stringify(serialized, null, 2);
+  const { pretty = false } = options;
+  const serialized = serializeMapCompact(map);
+  const contents = JSON.stringify(serialized, null, pretty ? 2 : 0);
 
   const directory = path.dirname(filename);
   if (directory && directory !== '.') {
@@ -32,6 +40,11 @@ function loadMapFromFile(filename) {
 
   setLayerHighestId(0);
   setAreaHighestId(0);
+
+  const isCompact = typeof data?.layer?.quadtree === 'string';
+  if (isCompact) {
+    return deserializeMapCompact(data);
+  }
 
   return deserializeMap(data);
 }

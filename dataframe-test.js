@@ -7,6 +7,7 @@ import {
   Layer,
   Area,
   Quadtree,
+  serializeMap,
   serializeMapCompact,
   deserializeMapCompact,
   serializeLayerCompact,
@@ -280,6 +281,10 @@ const tests = [
       const map = new Map('save-load-test', rootLayer);
 
       await saveMapToFile(map, filePath);
+      const compactRaw = await fs.readFile(filePath, 'utf8');
+      const compactData = JSON.parse(compactRaw);
+      assert.equal(typeof compactData.layer.quadtree, 'string');
+
       const loaded = await loadMapFromFile(filePath);
 
       assert.equal(loaded.name, map.name);
@@ -291,6 +296,25 @@ const tests = [
       assert.equal(loaded.layer.areas[1].name, 'area1');
       assert.equal(loaded.layer.children.length, 1);
       assert.equal(loaded.layer.children[0].name, 'child');
+
+      await fs.rm(tempDir, { recursive: true, force: true });
+    },
+  },
+  {
+    name: 'Legacy map files remain loadable',
+    run: async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gaia-legacy-'));
+      const filePath = path.join(tempDir, 'map.json');
+
+      const rootLayer = new Layer(undefined, new Quadtree(7), null, [0, 0], [8, 8], 'legacy-root');
+      const map = new Map('legacy', rootLayer);
+
+      const legacyPayload = JSON.stringify(serializeMap(map), null, 2);
+      await fs.writeFile(filePath, legacyPayload, 'utf8');
+
+      const loaded = await loadMapFromFile(filePath);
+      assert.equal(loaded.name, 'legacy');
+      assert.equal(loaded.layer.name, 'legacy-root');
 
       await fs.rm(tempDir, { recursive: true, force: true });
     },

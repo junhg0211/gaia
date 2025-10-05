@@ -1067,8 +1067,8 @@ export function createCanvasController(options) {
     if (!ctx || !canvas) return
 
     ctx.fillStyle = '#f0f0f0'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.globalAlpha = 1
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     const map = getMap?.()
     if (map) {
@@ -1093,6 +1093,7 @@ export function createCanvasController(options) {
     ctx.fillStyle = 'black'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
+    ctx.globalAlpha = 1
     const startX = camera.toScreenX(0) % gridSize
     const startY = camera.toScreenY(0) % gridSize
     for (let x = startX; x < canvas.width; x += gridSize) {
