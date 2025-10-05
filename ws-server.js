@@ -837,16 +837,12 @@ async function handleMessage(ws, message) {
       return;
     }
 
-    if (area.parent !== targetArea.parent) {
-      ws.send('ERR Area does not belong to a layer');
-      return;
-    }
-
-    if (targetArea.clipAreas.includes(clipArea)) {
+    if (targetArea.clipAreas.includes(parseInt(clipArea))) {
       ws.send('ERR Clip area already exists');
       return;
     }
-    targetArea.clipAreas.push(clipArea);
+
+    targetArea.clipAreas.push(parseInt(clipArea));
     ws.send(`OK Added clip area`);
 
     const broadcastMessage = `ADDCLIP:${area}:${clipArea}`;
