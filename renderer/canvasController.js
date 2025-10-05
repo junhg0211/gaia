@@ -171,8 +171,9 @@ function buildTools({
         const fromWorld = toWorldPoint(lineVars.x, lineVars.y)
         const toWorld = toWorldPoint(event.clientX, event.clientY)
         if (!fromWorld || !toWorld) return
+        const precision = 1 / camera.zoom;
         sendMessage("SNAP");
-        sendMessage(`LINE:${selectedArea.parent.id}:${fromWorld.x},${fromWorld.y}:${toWorld.x},${toWorld.y}:${selectedArea.id},${lineVars.width}`)
+        sendMessage(`LINE:${selectedArea.parent.id}:${fromWorld.x},${fromWorld.y}:${toWorld.x},${toWorld.y}:${selectedArea.id},${lineVars.width}:${precision}`)
         updateCanvas()
       },
       onwheel: () => {},
@@ -228,8 +229,9 @@ function buildTools({
         const y1 = Math.min(fromWorld.y, toWorld.y)
         const x2 = Math.max(fromWorld.x, toWorld.x)
         const y2 = Math.max(fromWorld.y, toWorld.y)
+        const precision = 1 / camera.zoom;
         sendMessage("SNAP");
-        sendMessage(`RECT:${selectedArea.parent.id}:${x1},${y1}:${x2},${y2}:${selectedArea.id}`)
+        sendMessage(`RECT:${selectedArea.parent.id}:${x1},${y1}:${x2},${y2}:${selectedArea.id}:${precision}`)
         updateCanvas()
       },
       render: (ctx) => {
@@ -270,8 +272,9 @@ function buildTools({
             return wp ? `${wp.x},${wp.y}` : null
           }).filter(Boolean)
           if (worldPoints.length !== polygonVars.points.length) return
+          const precision = 1 / camera.zoom;
           sendMessage("SNAP");
-          sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}`)
+          sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}:${precision}`)
           updateCanvas()
         }
       },
@@ -333,7 +336,8 @@ function buildTools({
         const end = toWorldPoint(event.clientX, event.clientY)
         if (!start || !end) return
         const width = brushVars.width / camera.zoom
-        sendMessage(`LINE:${selectedArea.parent.id}:${start.x},${start.y}:${end.x},${end.y}:${selectedArea.id},${width}`)
+        const precision = 1 / camera.zoom;
+        sendMessage(`LINE:${selectedArea.parent.id}:${start.x},${start.y}:${end.x},${end.y}:${selectedArea.id},${width}:${precision}`)
         brushVars.previousX = event.clientX
         brushVars.previousY = event.clientY
         updateCanvas()
@@ -476,8 +480,9 @@ function buildTools({
           updateCanvas()
           return
         }
+        const precision = 1 / camera.zoom;
         sendMessage("SNAP");
-        sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}`)
+        sendMessage(`POLY:${selectedArea.parent.id}:${worldPoints.join(',')}:${selectedArea.id}:${precision}`)
         lassoVars.points = []
         updateCanvas()
       },

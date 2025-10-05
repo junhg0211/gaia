@@ -91,7 +91,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  const LINE_RE = /^LINE:(\d+):([0-9\-\.]+),([0-9\-\.]+):([0-9\-\.]+),([0-9\-\.]+):(\d+),([0-9\.]+)$/;
+  const LINE_RE = /^LINE:(\d+):([0-9\-\.]+),([0-9\-\.]+):([0-9\-\.]+),([0-9\-\.]+):(\d+),([0-9\.]+):([0-9\.]+)$/;
   const lineMatch = message.match(LINE_RE);
   if (lineMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -105,6 +105,7 @@ async function handleMessage(ws, message) {
     const y2 = parseFloat(lineMatch[5]);
     const color = parseInt(lineMatch[6]);
     const brushSize = parseFloat(lineMatch[7]);
+    const precision = parseFloat(lineMatch[8]);
 
     const layer = map.findLayer(layerId);
     if (!layer) {
@@ -118,9 +119,10 @@ async function handleMessage(ws, message) {
     const [sx, sy] = layer.size ?? [1, 1];
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
-    layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, undefined, bounds);
+    const depth = Math.log2(layer.size[0] / precision);
+    layer.quadtree.drawLine(x1, y1, x2, y2, brushSize, color, depth, bounds);
 
-    const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}`;
+    const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}:${precision}`;
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
     }
@@ -346,8 +348,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  // fillrect
-  const RECT_RE = /^RECT:(\d+):([0-9\-]+),([0-9\-]+):([0-9\-]+),([0-9\-]+):(\d+)$/;
+  const RECT_RE = /^RECT:(\d+):([0-9\-]+),([0-9\-]+):([0-9\-]+),([0-9\-]+):(\d+):([0-9\.]+)$/;
   const rectMatch = message.match(RECT_RE);
   if (rectMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -360,6 +361,7 @@ async function handleMessage(ws, message) {
     const x2 = parseInt(rectMatch[4]);
     const y2 = parseInt(rectMatch[5]);
     const color = parseInt(rectMatch[6]);
+    const precision = parseFloat(rectMatch[7]);
 
     const layer = map.findLayer(layerId);
     if (!layer) {
@@ -373,9 +375,10 @@ async function handleMessage(ws, message) {
     const [sx, sy] = layer.size ?? [1, 1];
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
-    layer.quadtree.drawRect(x1, y1, x2, y2, color, undefined, bounds);
+    const depth = Math.log2(layer.size[0] / precision);
+    layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds);
 
-    const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}`;
+    const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
     }
@@ -384,7 +387,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  const FILLPOLY_RE = /^POLY:(\d+):((?:[0-9\-]+,[0-9\-]+,?)+):(\d+)$/;
+  const FILLPOLY_RE = /^POLY:(\d+):((?:[0-9\-]+,[0-9\-]+,?)+):(\d+):([0-9\.]+)$/;
   const fillPolyMatch = message.match(FILLPOLY_RE);
   if (fillPolyMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -394,6 +397,7 @@ async function handleMessage(ws, message) {
     const layerId = parseInt(fillPolyMatch[1]);
     const pointsStr = fillPolyMatch[2];
     const color = parseInt(fillPolyMatch[3]);
+    const precision = parseFloat(fillPolyMatch[4]);
 
     const points = pointsStr.split(',').map(v => parseInt(v));
     if (points.length < 6 || points.length % 2 !== 0) {
@@ -417,9 +421,10 @@ async function handleMessage(ws, message) {
     const [sx, sy] = layer.size ?? [1, 1];
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
-    layer.quadtree.drawPolygon(newPoints, color, undefined, bounds);
+    const depth = Math.log2(layer.size[0] / precision);
+    layer.quadtree.drawPolygon(newPoints, color, depth, bounds);
 
-    const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}`;
+    const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
     }
