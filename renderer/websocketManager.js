@@ -61,7 +61,7 @@ export function createWebSocketManager({
 
   const handleLineMessage = (data) => {
     const payload = data.slice(5)
-    const [layerId, from, to, areaAndWidth, precision] = payload.split(':')
+    let [layerId, from, to, areaAndWidth, precision] = payload.split(':')
     const [x1, y1] = from.split(',').map((value) => Number(value))
     const [x2, y2] = to.split(',').map((value) => Number(value))
     const [areaId, width] = areaAndWidth.split(',').map((value) => Number(value))
@@ -77,6 +77,7 @@ export function createWebSocketManager({
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const depth = Math.log2(layer.size[0] / precision)
     layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds)
+    console.log("drawLine", { x1, y1, x2, y2, width, areaId, depth, bounds })
     updateCanvas?.()
   }
 

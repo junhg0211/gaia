@@ -165,9 +165,8 @@ function buildTools({
         if (!lineVars.brushing) return
         lineVars.brushing = false
         const selectedArea = getSelectedArea()
-        const map = getMap()
         const canvas = getCanvas()
-        if (!selectedArea || !map || !canvas) return
+        if (!selectedArea || !canvas) return
         const fromWorld = toWorldPoint(lineVars.x, lineVars.y)
         const toWorld = toWorldPoint(event.clientX, event.clientY)
         if (!fromWorld || !toWorld) return
@@ -329,9 +328,8 @@ function buildTools({
         if (event.button !== 0) return
         if (!brushVars.brushing) return
         const selectedArea = getSelectedArea()
-        const map = getMap()
         const canvas = getCanvas()
-        if (!selectedArea || !map || !canvas) return
+        if (!selectedArea || !canvas) return
         const start = toWorldPoint(brushVars.previousX, brushVars.previousY)
         const end = toWorldPoint(event.clientX, event.clientY)
         if (!start || !end) return
