@@ -1074,6 +1074,13 @@ export function createCanvasController(options) {
     onImageProcessingComplete,
   })
 
+  let gridOn = true
+
+  function toggleGrid() {
+    gridOn = !gridOn
+    updateCanvas()
+  }
+
   function sendCursorMessage(x, y) {
     const socket = getWs?.()
     if (!socket || !isConnected?.()) return
@@ -1115,13 +1122,14 @@ export function createCanvasController(options) {
     }
 
     const gridSize = unit * camera.zoom
+    ctx.globalAlpha = 1
+    if (gridOn) {
     ctx.strokeStyle = '#ccc'
     ctx.lineWidth = 1
     ctx.font = '10px Arial'
     ctx.fillStyle = 'black'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.globalAlpha = 1
     const startX = camera.toScreenX(0) % gridSize
     const startY = camera.toScreenY(0) % gridSize
     for (let x = startX; x < canvas.width; x += gridSize) {
@@ -1151,6 +1159,7 @@ export function createCanvasController(options) {
         label = `${-label}N`
       }
       ctx.fillText(label, canvas.width - 2, y)
+    }
     }
 
     // 카메라 줌 레벨 따라서 축척 그리기
@@ -1409,5 +1418,6 @@ export function createCanvasController(options) {
     mouseButtonDownHandler,
     mouseButtonUpHandler,
     installGlobalListeners,
+    toggleGrid
   }
 }

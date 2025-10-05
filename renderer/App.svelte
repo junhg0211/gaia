@@ -177,6 +177,12 @@
     if (!connected || !ws) return
     ws.send('UNDO')
   }
+
+  function toggleGrid() {
+    if (!canvasController) return
+    canvasController.toggleGrid()
+    redrawCanvas()
+  }
 </script>
 
 <svelte:head>
@@ -196,6 +202,7 @@
     <div>Gaia</div>
     {#if connected}
       <div>
+        <button on:click={toggleGrid}><i class="bi bi-grid-3x3-gap"></i></button>
         <button on:click={undoMap}><i class="bi bi-arrow-counterclockwise"></i></button>
         <button on:click={saveMap}><i class="bi bi-floppy"></i></button>
         <button on:click={reloadMap}><i class="bi bi-arrow-clockwise"></i></button>
