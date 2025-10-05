@@ -75,6 +75,8 @@ function buildTools({
     points: [],
   }
 
+  const fillVars = {}
+
   const imageVars = {
     image: null,
     positionX: 0,
@@ -367,6 +369,33 @@ function buildTools({
         ctx.beginPath()
         ctx.arc(x, y, brushVars.width / 2, 0, Math.PI * 2)
         ctx.stroke()
+      },
+    },
+    {
+      name: '페인트 통',
+      icon: 'paint-bucket',
+      hotkey: 'g',
+      vars: fillVars,
+      onmousedown: (event) => {
+        if (event.button !== 0) return
+        const selectedArea = getSelectedArea()
+        const canvas = getCanvas()
+        if (!selectedArea || !canvas) return
+
+        const map = getMap?.()
+        const canonicalArea = typeof map?.findArea === 'function'
+          ? map.findArea(selectedArea.id)
+          : selectedArea
+        const targetArea = canonicalArea ?? selectedArea
+        const layer = targetArea?.parent ?? selectedArea.parent
+        if (!layer || typeof layer.sampleValueAt !== 'function') return
+
+        const worldPoint = toWorldPoint(event.clientX, event.clientY)
+        if (!worldPoint) return
+
+        const precision = Math.max(1 / camera.zoom, 1e-6)
+        sendMessage('SNAP')
+        sendMessage(`FILL:${layer.id}:${worldPoint.x},${worldPoint.y}:${targetArea.id}:${precision}`)
       },
     },
     {

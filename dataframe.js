@@ -391,6 +391,141 @@ class Layer {
 
     this.cleanup();
   }
+
+  getBounds() {
+    const [px, py] = this.pos ?? [0, 0];
+    const [sx, sy] = this.size ?? [1, 1];
+    return { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
+  }
+
+  sampleValueAt(x, y, precision) {
+    const bounds = this.getBounds();
+    const [sx] = this.size ?? [1, 1];
+    const width = Math.max(sx, EPSILON);
+    const safePrecision = typeof precision === 'number' && precision > 0 ? precision : width;
+    const rawDepth = Math.log2(width / safePrecision);
+    const depth = Math.max(0, Math.min(16, Math.round(rawDepth)));
+    return this.quadtree.getValueAt(x, y, depth, bounds);
+  }
+
+  floodFill(x, y, newValue, precision, options = {}) {
+    if (!Number.isFinite(newValue)) {
+      throw new TypeError('newValue must be a finite number');
+    }
+
+    const bounds = this.getBounds();
+    const [sx, sy] = this.size ?? [1, 1];
+    const width = Math.max(sx, EPSILON);
+    const height = Math.max(sy, EPSILON);
+    const safePrecision = typeof precision === 'number' && precision > 0 ? precision : width;
+    const rawDepth = Math.log2(width / safePrecision);
+    const depth = Math.max(0, Math.min(16, Math.round(rawDepth)));
+    const cellsPerAxis = Math.max(1, 1 << depth);
+    const cellWidth = width / cellsPerAxis;
+    const cellHeight = height / cellsPerAxis;
+
+    if (!Number.isFinite(cellWidth) || !Number.isFinite(cellHeight) || cellWidth <= 0 || cellHeight <= 0) {
+      return { filled: 0, reason: 'invalid_precision' };
+    }
+
+    const originX = bounds.minX;
+    const originY = bounds.minY;
+
+    const startX = Math.floor((x - originX) / cellWidth);
+    const startY = Math.floor((y - originY) / cellHeight);
+
+    if (startX < 0 || startX >= cellsPerAxis || startY < 0 || startY >= cellsPerAxis) {
+      return { filled: 0, reason: 'out_of_bounds' };
+    }
+
+    const sampleX = originX + (startX + 0.5) * cellWidth;
+    const sampleY = originY + (startY + 0.5) * cellHeight;
+    const targetValue = this.quadtree.getValueAt(sampleX, sampleY, depth, bounds);
+
+    if (targetValue === newValue) {
+      return { filled: 0, reason: 'already_filled', targetValue };
+    }
+
+    const baselineLimit = Math.max(1, Math.trunc(options.maxCells ?? 200000));
+    const autoScale = options.autoScaleMaxCells !== false;
+    const gridSize = cellsPerAxis * cellsPerAxis;
+    let maxCells = baselineLimit;
+    if (autoScale) {
+      const limitCap = Math.max(baselineLimit, Math.trunc(options.maxCellsCap ?? 2000000));
+      maxCells = Math.min(limitCap, Math.max(baselineLimit, gridSize));
+    }
+
+    const visitedArrayThreshold = Math.max(1, Math.trunc(options.maxVisitedArraySize ?? 8000000));
+    const useArrayVisited = gridSize <= visitedArrayThreshold;
+    const visitedArray = useArrayVisited ? new Uint8Array(gridSize) : null;
+    const visitedSet = useArrayVisited ? null : new Set();
+    const stack = [startY * cellsPerAxis + startX];
+    const cells = [];
+    let touchesBoundary = false;
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+      const cx = current % cellsPerAxis;
+      const cy = Math.floor(current / cellsPerAxis);
+      if (cx < 0 || cx >= cellsPerAxis || cy < 0 || cy >= cellsPerAxis) {
+        continue;
+      }
+
+      if (cx === 0 || cy === 0 || cx === cellsPerAxis - 1 || cy === cellsPerAxis - 1) {
+        touchesBoundary = true;
+      }
+
+      const alreadyVisited = useArrayVisited ? visitedArray[current] === 1 : visitedSet.has(current);
+      if (alreadyVisited) {
+        continue;
+      }
+      if (useArrayVisited) {
+        visitedArray[current] = 1;
+      } else {
+        visitedSet.add(current);
+      }
+
+      const centerX = originX + (cx + 0.5) * cellWidth;
+      const centerY = originY + (cy + 0.5) * cellHeight;
+      const cellValue = this.quadtree.getValueAt(centerX, centerY, depth, bounds);
+      if (cellValue !== targetValue) {
+        continue;
+      }
+
+      cells.push(current);
+      if (cells.length > maxCells) {
+        return { filled: 0, reason: 'limit_exceeded', targetValue, limit: maxCells };
+      }
+
+      if (cx + 1 < cellsPerAxis) stack.push(cy * cellsPerAxis + (cx + 1));
+      if (cx > 0) stack.push(cy * cellsPerAxis + (cx - 1));
+      if (cy + 1 < cellsPerAxis) stack.push((cy + 1) * cellsPerAxis + cx);
+      if (cy > 0) stack.push((cy - 1) * cellsPerAxis + cx);
+    }
+
+    if (cells.length === 0) {
+      return { filled: 0, reason: 'no_target', targetValue };
+    }
+
+    const allowOpenSpace = options.allowOpenSpace ?? false;
+    if (targetValue === 0 && !allowOpenSpace && touchesBoundary) {
+      return { filled: 0, reason: 'open_space', targetValue, touchesBoundary: true };
+    }
+
+    for (const index of cells) {
+      const cx = index % cellsPerAxis;
+      const cy = Math.floor(index / cellsPerAxis);
+      const minX = originX + cx * cellWidth;
+      const minY = originY + cy * cellHeight;
+      const maxX = minX + cellWidth;
+      const maxY = minY + cellHeight;
+      this.quadtree.drawRect(minX, minY, maxX, maxY, newValue, depth, bounds);
+    }
+
+    this.cleanup();
+
+    return { filled: cells.length, targetValue, touchesBoundary };
+  }
 }
 
 let areaHighestId = 0;
@@ -635,6 +770,56 @@ class Quadtree {
       [minX, maxY],
     ];
     return this.drawPolygon(points, value, depth, bounds);
+  }
+
+  getValueAt(x, y, depth = 11, bounds) {
+    const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+    if (
+      x < nodeBounds.minX - EPSILON ||
+      x > nodeBounds.maxX + EPSILON ||
+      y < nodeBounds.minY - EPSILON ||
+      y > nodeBounds.maxY + EPSILON
+    ) {
+      return 0;
+    }
+
+    if (this.isLeaf() || depth <= 0) {
+      return this.value;
+    }
+
+    if (!this.children || this.children.length !== 4) {
+      return this.value;
+    }
+
+    const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
+    const midY = (nodeBounds.minY + nodeBounds.maxY) / 2;
+
+    let index = 0;
+    let childBounds;
+
+    if (x >= midX) {
+      if (y >= midY) {
+        index = 3;
+        childBounds = { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY };
+      } else {
+        index = 1;
+        childBounds = { minX: midX, minY: nodeBounds.minY, maxX: nodeBounds.maxX, maxY: midY };
+      }
+    } else if (y >= midY) {
+      index = 2;
+      childBounds = { minX: nodeBounds.minX, minY: midY, maxX: midX, maxY: nodeBounds.maxY };
+    } else {
+      index = 0;
+      childBounds = { minX: nodeBounds.minX, minY: nodeBounds.minY, maxX: midX, maxY: midY };
+    }
+
+    const child = this.children[index];
+    if (!child) {
+      return this.value;
+    }
+
+    return child.getValueAt(x, y, depth - 1, childBounds);
   }
 }
 

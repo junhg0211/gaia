@@ -17,6 +17,7 @@ if (fs.existsSync('map.gaia')) {
 
 const clients = new Set();
 const compactClients = new Set();
+const clientState = new Map();
 const snapshots = [];
 async function handleMessage(ws, message) {
   console.log(`📩 Received: ${message}`);
@@ -36,6 +37,7 @@ async function handleMessage(ws, message) {
     const username = loginMatch[2].trim();
     if (password === 'secret') {
       clients.add([ws, username]);
+      clientState.set(ws, { openFillAttempts: 0, lastOpenAttempt: 0, cooldownUntil: 0 });
       ws.send(`OK`);
     } else {
       ws.send('ERR Invalid password');
@@ -256,7 +258,8 @@ async function handleMessage(ws, message) {
       return;
     }
 
-    const newArea = new Area(null, `#${color}`, layerId, areaName);
+    const newArea = new Area(null, `#${color}`, layer, areaName);
+    newArea.parent = layer;
     layer.areas.push(newArea);
     ws.send(`OK`);
 
@@ -499,6 +502,116 @@ async function handleMessage(ws, message) {
     return;
   }
 
+  const FILL_RE = /^FILL:(\d+):([0-9\-\.]+),([0-9\-\.]+):(\d+):([0-9\.]+)$/;
+  const fillMatch = message.match(FILL_RE);
+  if (fillMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+
+    const layerId = parseInt(fillMatch[1]);
+    const x = parseFloat(fillMatch[2]);
+    const y = parseFloat(fillMatch[3]);
+    const color = parseInt(fillMatch[4]);
+    const precision = Math.max(1e-6, parseFloat(fillMatch[5]) || 1);
+
+    const area = map.findArea(color);
+    if (!area) {
+      ws.send('ERR Invalid area ID');
+      return;
+    }
+
+    const requestedLayer = Number.isFinite(layerId) ? map.findLayer(layerId) : null;
+
+    let inferredLayer = area.parent ?? requestedLayer;
+    if (typeof inferredLayer === 'number') {
+      const resolved = map.findLayer(inferredLayer);
+      if (resolved) {
+        inferredLayer = resolved;
+        area.parent = resolved;
+      }
+    }
+
+    if (!inferredLayer) {
+      ws.send('ERR Area does not belong to any layer');
+      return;
+    }
+
+    const layer = inferredLayer;
+    if (requestedLayer && requestedLayer.id !== layer.id) {
+      console.warn(`Paint bucket layer mismatch: requested ${requestedLayer.id}, using ${layer.id}`);
+    }
+
+    const getClientState = typeof clientState.get === 'function' ? clientState.get.bind(clientState) : null;
+    const setClientState = typeof clientState.set === 'function' ? clientState.set.bind(clientState) : null;
+
+    let state = getClientState ? getClientState(ws) : null;
+    if (!state) {
+      state = { openFillAttempts: 0, lastOpenAttempt: 0, cooldownUntil: 0 };
+      if (setClientState) setClientState(ws, state);
+    }
+
+    const now = Date.now();
+    if (state.cooldownUntil && now < state.cooldownUntil) {
+      ws.send('ERR Paint bucket temporarily disabled after repeated open space attempts');
+      return;
+    }
+
+    const result = layer.floodFill(x, y, color, precision, { maxCells: 200000 });
+
+    if (result.reason === 'open_space') {
+      state.openFillAttempts = (state.openFillAttempts || 0) + 1;
+      state.lastOpenAttempt = now;
+      if (state.openFillAttempts >= 3) {
+        state.cooldownUntil = now + 3000;
+        state.openFillAttempts = 0;
+      }
+      if (setClientState) setClientState(ws, state);
+      ws.send('ERR Paint bucket works only inside existing regions');
+      return;
+    }
+
+    if (result.reason === 'limit_exceeded') {
+      ws.send('ERR Fill area too large; zoom in or refine the region');
+      return;
+    }
+
+    if (result.reason === 'invalid_precision') {
+      ws.send('ERR Invalid precision for fill operation');
+      return;
+    }
+
+    if (result.reason === 'out_of_bounds') {
+      ws.send('ERR Fill point outside of layer bounds');
+      return;
+    }
+
+    if (result.reason === 'no_target') {
+      ws.send('ERR Nothing to fill at target location');
+      return;
+    }
+
+    if (result.reason === 'already_filled') {
+      state.openFillAttempts = 0;
+      state.cooldownUntil = 0;
+      if (setClientState) setClientState(ws, state);
+      ws.send('OK Fill skipped (already target color)');
+      return;
+    }
+
+    state.openFillAttempts = 0;
+    state.cooldownUntil = 0;
+    if (setClientState) setClientState(ws, state);
+
+    const broadcastMessage = `FILL:${layer.id}:${x},${y}:${color}:${precision}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    ws.send('OK');
+    return;
+  }
+
   const FILLPOLY_RE = /^POLY:(\d+):((?:[0-9\-\.]+,[0-9\-\.]+,?)+):(\d+):([0-9\.]+)$/;
   const fillPolyMatch = message.match(FILLPOLY_RE);
   if (fillPolyMatch) {
@@ -651,6 +764,9 @@ wss.on('connection', (ws, req) => {
   // 연결 종료 이벤트
   ws.on('close', () => {
     compactClients.delete(ws);
+    if (typeof clientState.delete === 'function') {
+      clientState.delete(ws);
+    }
     if (clients.has(ws)) {
       console.log(`❌ Client disconnected: ${clientIP}`);
       clients.delete(ws);

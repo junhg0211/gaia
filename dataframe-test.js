@@ -179,6 +179,92 @@ const tests = [
     },
   },
   {
+    name: 'Layer sampleValueAt reports stored ids with precision fallback',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [8, 8], 'sample-layer');
+      const bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawRect(0, 0, 4, 4, 7, 4, bounds);
+      layer.quadtree.drawRect(4, 4, 8, 8, 11, 4, bounds);
+
+      assert.equal(layer.sampleValueAt(1, 1, 0.5), 7);
+      assert.equal(layer.sampleValueAt(6, 6, 0.5), 11);
+      assert.equal(layer.sampleValueAt(20, 20, 0.5), 0);
+    },
+  },
+  {
+    name: 'Layer floodFill replaces regions and reports guard conditions',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [8, 8], 'fill-layer');
+      const bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawRect(2, 2, 6, 6, 9, 4, bounds);
+
+      const openSpace = layer.floodFill(0.5, 0.5, 13, 1);
+      assert.equal(openSpace.reason, 'open_space');
+      assert.equal(layer.sampleValueAt(3, 3, 1), 9);
+
+      const fillResult = layer.floodFill(3, 3, 14, 1);
+      assert.ok(fillResult.filled > 0);
+      assert.equal(layer.sampleValueAt(3, 3, 1), 14);
+
+      const already = layer.floodFill(3, 3, 14, 1);
+      assert.equal(already.reason, 'already_filled');
+
+      const limited = layer.floodFill(3, 3, 15, 1, { maxCells: 2, autoScaleMaxCells: false });
+      assert.equal(limited.reason, 'limit_exceeded');
+      assert.equal(layer.sampleValueAt(3, 3, 1), 14);
+    },
+  },
+  {
+    name: 'Layer floodFill rejects points outside of layer bounds',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [32, 32], 'bounds-layer');
+      const result = layer.floodFill(100, 100, 5, 1);
+      assert.equal(result.reason, 'out_of_bounds');
+      assert.equal(layer.sampleValueAt(100, 100, 1), 0);
+    },
+  },
+
+  {
+    name: 'Layer floodFill tolerates large regions without premature limits',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [64, 64], 'large-fill-layer');
+      const bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawRect(0, 0, 64, 64, 21, 8, bounds);
+
+      const result = layer.floodFill(32, 32, 22, 0.5, { maxCells: 200 });
+      assert.ok(result.filled > 0);
+      assert.equal(layer.sampleValueAt(32, 32, 0.5), 22);
+    },
+  },
+  {
+    name: 'Layer floodFill distinguishes enclosed empty regions from open space',
+    run: () => {
+      const layer = new Layer(undefined, new Quadtree(0), null, [0, 0], [64, 64], 'open-space-layer');
+      const bounds = { minX: layer.pos[0], minY: layer.pos[1], maxX: layer.pos[0] + layer.size[0], maxY: layer.pos[1] + layer.size[1] };
+
+      layer.quadtree.drawLine(8, 8, 56, 8, 2, 7, 10, bounds);
+      layer.quadtree.drawLine(56, 8, 56, 56, 2, 7, 10, bounds);
+      layer.quadtree.drawLine(56, 56, 8, 56, 2, 7, 10, bounds);
+      layer.quadtree.drawLine(8, 56, 8, 8, 2, 7, 10, bounds);
+
+      const enclosed = layer.floodFill(32, 32, 9, 0.5, { maxCells: 5000 });
+      assert.ok(enclosed.filled > 0);
+      assert.equal(enclosed.touchesBoundary, false);
+      assert.equal(layer.sampleValueAt(32, 32, 0.5), 9);
+
+      const openRegion = layer.floodFill(2, 2, 11, 0.5, { maxCells: 5000 });
+      assert.equal(openRegion.reason, 'open_space');
+      assert.equal(layer.sampleValueAt(2, 2, 0.5), 0);
+
+      const forced = layer.floodFill(2, 2, 11, 0.5, { maxCells: 5000, allowOpenSpace: true });
+      assert.ok(forced.filled > 0);
+      assert.equal(forced.touchesBoundary, true);
+    },
+  },
+  {
     name: 'Map can be saved to and loaded from file',
     run: async () => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gaia-map-'));

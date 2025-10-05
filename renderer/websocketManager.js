@@ -200,6 +200,29 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
+  const handleFillMessage = (data) => {
+    const payload = data.slice(5)
+    const parts = payload.split(':')
+    if (parts.length < 4) return
+    const [layerIdStr, coordStr, areaIdStr, precisionStr] = parts
+    const [xStr, yStr] = coordStr.split(',')
+    const layerId = Number(layerIdStr)
+    const x = Number(xStr)
+    const y = Number(yStr)
+    const areaId = Number(areaIdStr)
+    const precision = parseFloat(precisionStr) || 1
+    if (!Number.isFinite(layerId) || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(areaId)) {
+      return
+    }
+    const map = getMap?.()
+    if (!map) return
+    const layer = map.findLayer(layerId)
+    if (!layer) return
+    layer.floodFill(x, y, areaId, precision)
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
+
   const handleDisconnectMessage = (data) => {
     const username = data.slice(11)
     delete getCursors?.()[username]
@@ -286,6 +309,8 @@ export function createWebSocketManager({
       handleRectMessage(data)
     } else if (data.startsWith('POLY:')) {
       handlePolygonMessage(data)
+    } else if (data.startsWith('FILL:')) {
+      handleFillMessage(data)
     } else if (data.startsWith('LAYER:')) {
       handleLayerMessage(data)
     } else if (data.startsWith('DISCONNECT:')) {
