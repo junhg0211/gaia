@@ -510,7 +510,8 @@ class Layer {
     const visitedArray = useArrayVisited ? new Uint8Array(gridSize) : null;
     const visitedSet = useArrayVisited ? null : new Set();
     const stack = [startY * cellsPerAxis + startX];
-    const cells = [];
+    const rows = new globalThis.Map();
+    let fillCount = 0;
     let touchesBoundary = false;
 
     while (stack.length > 0) {
@@ -542,8 +543,14 @@ class Layer {
         continue;
       }
 
-      cells.push(current);
-      if (cells.length > maxCells) {
+      let row = rows.get(cy);
+      if (!row) {
+        row = [];
+        rows.set(cy, row);
+      }
+      row.push(cx);
+      fillCount += 1;
+      if (fillCount > maxCells) {
         return { filled: 0, reason: 'limit_exceeded', targetValue, limit: maxCells };
       }
 
@@ -553,7 +560,7 @@ class Layer {
       if (cy > 0) stack.push((cy - 1) * cellsPerAxis + cx);
     }
 
-    if (cells.length === 0) {
+    if (fillCount === 0) {
       return { filled: 0, reason: 'no_target', targetValue };
     }
 
@@ -562,19 +569,73 @@ class Layer {
       return { filled: 0, reason: 'open_space', targetValue, touchesBoundary: true };
     }
 
-    for (const index of cells) {
-      const cx = index % cellsPerAxis;
-      const cy = Math.floor(index / cellsPerAxis);
-      const minX = originX + cx * cellWidth;
-      const minY = originY + cy * cellHeight;
-      const maxX = minX + cellWidth;
-      const maxY = minY + cellHeight;
+    // Batch contiguous cells into rectangles to reduce quadtree writes
+    const sortedRows = [...rows.keys()].sort((a, b) => a - b);
+    let activeSegments = new globalThis.Map();
+    const rectangles = [];
+
+    for (const rowIndex of sortedRows) {
+      const cols = rows.get(rowIndex);
+      if (!cols || cols.length === 0) continue;
+      cols.sort((a, b) => a - b);
+
+      const segments = [];
+      let segStart = cols[0];
+      let prev = cols[0];
+      for (let i = 1; i < cols.length; i++) {
+        const current = cols[i];
+        if (current === prev) continue;
+        if (current === prev + 1) {
+          prev = current;
+          continue;
+        }
+        segments.push({ start: segStart, end: prev });
+        segStart = current;
+        prev = current;
+      }
+      segments.push({ start: segStart, end: prev });
+
+      const nextActive = new globalThis.Map();
+      for (const segment of segments) {
+        const key = `${segment.start}:${segment.end}`;
+        const existing = activeSegments.get(key);
+        if (existing) {
+          existing.endRow = rowIndex;
+          nextActive.set(key, existing);
+        } else {
+          nextActive.set(key, {
+            startRow: rowIndex,
+            endRow: rowIndex,
+            startCol: segment.start,
+            endCol: segment.end,
+          });
+        }
+      }
+
+      for (const [key, rect] of activeSegments.entries()) {
+        if (!nextActive.has(key)) {
+          rectangles.push(rect);
+        }
+      }
+
+      activeSegments = nextActive;
+    }
+
+    for (const rect of activeSegments.values()) {
+      rectangles.push(rect);
+    }
+
+    for (const rect of rectangles) {
+      const minX = originX + rect.startCol * cellWidth;
+      const minY = originY + rect.startRow * cellHeight;
+      const maxX = originX + (rect.endCol + 1) * cellWidth;
+      const maxY = originY + (rect.endRow + 1) * cellHeight;
       this.quadtree.drawRect(minX, minY, maxX, maxY, newValue, depth, bounds);
     }
 
     this.cleanup();
 
-    return { filled: cells.length, targetValue, touchesBoundary };
+    return { filled: fillCount, targetValue, touchesBoundary };
   }
 }
 
