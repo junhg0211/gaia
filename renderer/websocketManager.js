@@ -1,4 +1,11 @@
-import { Quadtree, Area as AreaType, Layer as LayerType, deserializeMap } from '../dataframe.js'
+import {
+  Quadtree,
+  Area as AreaType,
+  Layer as LayerType,
+  deserializeMap,
+  deserializeMapCompact,
+  deserializeLayerCompact,
+} from '../dataframe.js'
 
 export function createWebSocketManager({
   getWsAddress,
@@ -24,6 +31,13 @@ export function createWebSocketManager({
   const handleMapMessage = (data) => {
     const mapData = data.slice(4)
     const parsed = deserializeMap(JSON.parse(mapData))
+    setMap(parsed)
+    updateCanvas?.()
+  }
+
+  const handleMapCompactMessage = (data) => {
+    const payload = data.slice(5)
+    const parsed = deserializeMapCompact(JSON.parse(payload))
     setMap(parsed)
     updateCanvas?.()
   }
@@ -135,6 +149,30 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
+  const handleLayerMessage = (data) => {
+    const payload = data.slice(6)
+    let parsed
+    try {
+      parsed = JSON.parse(payload)
+    } catch (error) {
+      console.warn('Failed to parse layer payload', error)
+      return
+    }
+
+    const { layer: layerData, parentId = null } = parsed ?? {}
+    if (!layerData) return
+
+    const map = getMap?.()
+    if (!map) return
+
+    const nextLayer = deserializeLayerCompact(layerData, null)
+    const updated = map.replaceLayer(nextLayer, parentId === undefined ? null : parentId)
+    if (!updated) return
+
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
+
   const handlePolygonMessage = (data) => {
     const payload = data.slice(5)
     let [layerId, pointsStr, areaId, precision] = payload.split(':')
@@ -226,7 +264,9 @@ export function createWebSocketManager({
   }
 
   const handleMessage = (data) => {
-    if (data.startsWith('MAP:')) {
+    if (data.startsWith('MAPC:')) {
+      handleMapCompactMessage(data)
+    } else if (data.startsWith('MAP:')) {
       handleMapMessage(data)
     } else if (data.startsWith('CURSOR:')) {
       handleCursorMessage(data)
@@ -244,6 +284,8 @@ export function createWebSocketManager({
       handleRectMessage(data)
     } else if (data.startsWith('POLY:')) {
       handlePolygonMessage(data)
+    } else if (data.startsWith('LAYER:')) {
+      handleLayerMessage(data)
     } else if (data.startsWith('DISCONNECT:')) {
       handleDisconnectMessage(data)
     } else if (data.startsWith('SEAN:')) {
@@ -277,11 +319,16 @@ export function createWebSocketManager({
       addLogEntry?.('connected to websocket')
       const username = getUsername?.() ?? ''
       socket.send(`LOGIN:secret:${username}`)
-      socket.send('LOAD')
+      socket.send('LOADC')
     }
     socket.onmessage = (event) => {
-      addLogEntry?.(event.data)
-      handleMessage(event.data)
+      const { data } = event
+      if (typeof data === 'string' && (data.startsWith('MAPC:') || data.startsWith('LAYER:'))) {
+        addLogEntry?.(`${data.slice(0, 32)}...`)
+      } else {
+        addLogEntry?.(data)
+      }
+      handleMessage(data)
     }
     socket.onclose = () => {
       setConnected(false)
@@ -297,12 +344,19 @@ export function createWebSocketManager({
 
   const reloadMap = () => {
     if (!socket || socket.readyState !== WebSocket.OPEN) return
-    socket.send('LOAD')
+    socket.send('LOADC')
     bumpMapUpdate?.()
+  }
+
+  const reloadLayer = (layerId) => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    if (typeof layerId !== 'number' || !Number.isFinite(layerId)) return
+    socket.send(`LOAD_LAYER:${Math.trunc(layerId)}`)
   }
 
   return {
     connect,
     reloadMap,
+    reloadLayer,
   }
 }

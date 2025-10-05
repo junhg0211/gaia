@@ -212,6 +212,30 @@ class Map {
     return searchLayer(this.layer, id);
   }
 
+  replaceLayer(nextLayer, parentId = null) {
+    if (!(nextLayer instanceof Layer)) {
+      throw new TypeError('Expected nextLayer to be an instance of Layer');
+    }
+
+    if (parentId === null) {
+      nextLayer.parent = null;
+      this.layer = nextLayer;
+      return true;
+    }
+
+    const parentLayer = this.findLayer(parentId);
+    if (!parentLayer) return false;
+
+    const existingIndex = parentLayer.children.findIndex(child => child.id === nextLayer.id);
+    if (existingIndex === -1) {
+      parentLayer.children.push(nextLayer);
+    } else {
+      parentLayer.children[existingIndex] = nextLayer;
+    }
+    nextLayer.parent = parentLayer;
+    return true;
+  }
+
   draw(ctx, canvas, camera, depth = 11) {
     const drawLayer = layer => {
       const [px, py] = layer.pos;
@@ -621,6 +645,143 @@ function serializeMap(map) {
   };
 }
 
+function toBase64(bytes) {
+  if (!bytes || bytes.length === 0) return '';
+
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
+  }
+
+  if (typeof btoa === 'function') {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  throw new Error('No base64 encoder available in this environment');
+}
+
+function fromBase64(base64) {
+  if (!base64) return new Uint8Array(0);
+
+  if (typeof Buffer !== 'undefined') {
+    const buffer = Buffer.from(base64, 'base64');
+    return Uint8Array.from(buffer);
+  }
+
+  if (typeof atob === 'function') {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  throw new Error('No base64 decoder available in this environment');
+}
+
+function encodeQuadtreeToArray(node, output) {
+  if (!node) {
+    output.push(0, 0);
+    return;
+  }
+
+  const value = typeof node.value === 'number' && Number.isFinite(node.value) ? node.value : 0;
+  if (node.isLeaf()) {
+    output.push(0, value >>> 0);
+    return;
+  }
+
+  output.push(1, value >>> 0);
+
+  for (let i = 0; i < 4; i++) {
+    const child = node.children && node.children[i];
+    if (child) {
+      encodeQuadtreeToArray(child, output);
+    } else {
+      output.push(0, value >>> 0);
+    }
+  }
+}
+
+function serializeQuadtreeCompact(node) {
+  if (!node) return '';
+  const data = [];
+  encodeQuadtreeToArray(node, data);
+  const typed = new Uint32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    typed[i] = data[i] >>> 0;
+  }
+  const bytes = new Uint8Array(typed.buffer);
+  return toBase64(bytes);
+}
+
+function decodeQuadtreeFromArray(data, cursor, parent) {
+  if (cursor >= data.length) {
+    return { node: new Quadtree(0, parent), cursor };
+  }
+
+  const type = data[cursor++];
+  const value = data[cursor++];
+  const node = new Quadtree(value, parent);
+
+  if (type !== 1) {
+    return { node, cursor };
+  }
+
+  node.children = [];
+  for (let i = 0; i < 4; i++) {
+    const childResult = decodeQuadtreeFromArray(data, cursor, node);
+    node.children.push(childResult.node);
+    cursor = childResult.cursor;
+  }
+
+  return { node, cursor };
+}
+
+function deserializeQuadtreeCompact(base64, parent = null) {
+  if (!base64) {
+    return new Quadtree(0, parent);
+  }
+
+  const bytes = fromBase64(base64);
+  if (bytes.length === 0) {
+    return new Quadtree(0, parent);
+  }
+
+  if (bytes.byteLength % 4 !== 0) {
+    throw new Error('Invalid quadtree payload');
+  }
+
+  const view = new Uint32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+  const { node } = decodeQuadtreeFromArray(view, 0, parent);
+  return node;
+}
+
+function serializeLayerCompact(layer) {
+  if (!layer) return null;
+
+  return {
+    id: layer.id,
+    name: layer.name,
+    pos: layer.pos,
+    size: layer.size,
+    quadtree: serializeQuadtreeCompact(layer.quadtree),
+    areas: layer.areas.map(area => serializeArea(area)),
+    children: layer.children.map(child => serializeLayerCompact(child)),
+  };
+}
+
+function serializeMapCompact(map) {
+  return {
+    name: map.name,
+    layer: serializeLayerCompact(map.layer),
+  };
+}
+
 function deserializeQuadtree(data, parent = null) {
   if (!data) return null;
 
@@ -629,6 +790,18 @@ function deserializeQuadtree(data, parent = null) {
     node.children = data.children.map(child => deserializeQuadtree(child, node));
   }
   return node;
+}
+
+function deserializeLayerCompact(data, parent = null) {
+  if (!data) return null;
+
+  const quadtree = deserializeQuadtreeCompact(data.quadtree);
+  const layer = new Layer(data.id, quadtree, parent, data.pos ?? null, data.size ?? null, data.name);
+
+  layer.areas = (data.areas ?? []).map(areaData => deserializeArea(areaData, layer));
+  layer.children = (data.children ?? []).map(childData => deserializeLayerCompact(childData, layer));
+
+  return layer;
 }
 
 function deserializeArea(data, parent) {
@@ -656,6 +829,15 @@ function deserializeMap(data) {
   return new Map(data.name, layer);
 }
 
+function deserializeMapCompact(data) {
+  if (!data || typeof data !== 'object') {
+    throw new TypeError('Invalid map data');
+  }
+
+  const layer = deserializeLayerCompact(data.layer, null);
+  return new Map(data.name, layer);
+}
+
 export {
   Map,
   Layer,
@@ -663,6 +845,10 @@ export {
   Quadtree,
   serializeMap,
   deserializeMap,
+  serializeMapCompact,
+  deserializeMapCompact,
+  serializeLayerCompact,
+  deserializeLayerCompact,
   getLayerHighestId,
   getLayerHughestId,
   setLayerHighestId,

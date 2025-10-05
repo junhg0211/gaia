@@ -13,6 +13,29 @@
   let username = 'User'
   let mapUpdate = 0
   let wsAddress = 'localhost'
+  let imageProgress = null
+
+  function normalizeProgress(info) {
+    if (!info || typeof info.percent !== 'number') return
+    const percent = Math.max(0, Math.min(1, info.percent))
+    const stage = info.stage ?? imageProgress?.stage ?? '처리 중'
+    const etaSeconds = typeof info.etaSeconds === 'number' && Number.isFinite(info.etaSeconds) && info.etaSeconds >= 0
+      ? info.etaSeconds
+      : null
+    imageProgress = { percent, stage, etaSeconds }
+  }
+
+  function formatEta(seconds) {
+    if (seconds === null) return '남은 시간 계산 중'
+    if (!Number.isFinite(seconds) || seconds < 0) return '남은 시간 계산 중'
+    const totalSeconds = Math.max(0, seconds)
+    const minutes = Math.floor(totalSeconds / 60)
+    const secs = totalSeconds % 60
+    if (minutes > 0) {
+      return `남은 시간 약 ${minutes}분 ${secs.toFixed(0)}초`
+    }
+    return `남은 시간 약 ${secs.toFixed(1)}초`
+  }
 
   let logContainer
   let workspace
@@ -40,6 +63,13 @@
     getSelectedArea: () => selectedArea,
     getWs: () => ws,
     isConnected: () => connected,
+    onImageProcessingStart: () => {
+      imageProgress = { percent: 0, stage: '준비 중', etaSeconds: null }
+    },
+    onImageProcessingProgress: normalizeProgress,
+    onImageProcessingComplete: () => {
+      imageProgress = null
+    },
   })
 
   const {
@@ -185,6 +215,21 @@
     </div>
     <div class="workspace" bind:this={workspace}>
       <canvas bind:this={canvas}></canvas>
+      {#if imageProgress !== null}
+        <div class="processing-overlay">
+          <div class="processing-card">
+            <div class="processing-title">{imageProgress.stage}</div>
+            <div class="processing-bar">
+              <div
+                class="processing-bar-fill"
+                style={`width: ${(imageProgress.percent * 100).toFixed(2)}%`}
+              ></div>
+            </div>
+            <div class="processing-percent">{(imageProgress.percent * 100).toFixed(2)}%</div>
+            <div class="processing-eta">{formatEta(imageProgress.etaSeconds)}</div>
+          </div>
+        </div>
+      {/if}
     </div>
     <div class="properties-window">
       <div class="layers">
@@ -239,6 +284,73 @@
   .workspace {
     flex: 1;
     background-color: #ffffff;
+    position: relative;
+    min-height: 0;
+  }
+  .workspace canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .processing-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    z-index: 5;
+  }
+  .processing-card {
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+    min-width: 240px;
+    text-align: center;
+  }
+  .processing-title {
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    font-size: 1.05rem;
+  }
+  .processing-bar {
+    position: relative;
+    height: 8px;
+    border-radius: 4px;
+    background: #d9d9d9;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+  }
+  .processing-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, #2f80ed, #56ccf2);
+    transition: width 0.18s ease-out;
+    min-width: 12px;
+  }
+  .processing-bar-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0, rgba(255,255,255,0.35) 8px, transparent 8px, transparent 16px);
+    animation: processing-stripes 0.75s linear infinite;
+  }
+  @keyframes processing-stripes {
+    from { transform: translateX(0); }
+    to { transform: translateX(32px); }
+  }
+  .processing-percent {
+    font-size: 0.9rem;
+    color: #333;
+    margin-bottom: 0.25rem;
+  }
+  .processing-eta {
+    font-size: 0.85rem;
+    color: #555;
   }
   .properties-window {
     width: 300px;

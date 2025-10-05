@@ -1,5 +1,5 @@
 import { tick } from 'svelte'
-import { Area } from '../dataframe.js'
+import { Area, serializeLayerCompact } from '../dataframe.js'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
@@ -15,6 +15,9 @@ function buildTools({
   getMap,
   sendMessage,
   setCurrentTool,
+  onImageProcessingStart = () => {},
+  onImageProcessingProgress = () => {},
+  onImageProcessingComplete = () => {},
 }) {
   const ensureCanvasRect = () => getCanvasRect() ?? null
 
@@ -532,56 +535,179 @@ function buildTools({
         }
         input.click()
       },
-      onend: () => {
-        if (imageVars.phase === 'resizing' && imageVars.image) {
-          imageVars.phase = 'idle'
-          sendMessage("SNAP");
+      onend: async () => {
+        if (imageVars.phase !== 'resizing' || !imageVars.image) return
 
-          const selectedArea = getSelectedArea()
-          const layer = selectedArea?.parent
-          const quadtree = layer?.quadtree
-          if (!layer || !quadtree) return
-          const x1 = imageVars.positionX
-          const y1 = imageVars.positionY
-          const x2 = imageVars.positionX + imageVars.image.width * imageVars.scale
-          const y2 = imageVars.positionY + imageVars.image.height * imageVars.scale
-          layer.expandTo(x1, y1)
-          layer.expandTo(x2, y2)
+        imageVars.phase = 'idle'
+        imageVars.nearestEdge = null
 
-          const c = document.createElement('canvas')
-          c.width = imageVars.image.width
-          c.height = imageVars.image.height
-          const ct = c.getContext('2d')
-          ct.imageSmoothingEnabled = false
-          ct.drawImage(imageVars.image, 0, 0)
-          const getColor = (x, y) => {
-            const imgData = ct.getImageData(
-              clamp(Math.floor(x), 0, imageVars.image.width - 1),
-              clamp(Math.floor(y), 0, imageVars.image.height - 1),
-              1, 1
-            )
-            const [r, g, b, a] = imgData.data
-            return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+        const selectedArea = getSelectedArea()
+        const layer = selectedArea?.parent
+        const quadtree = layer?.quadtree
+        if (!layer || !quadtree) return
+
+        const image = imageVars.image
+        const pixelScale = imageVars.scale
+        const originX = imageVars.positionX
+        const originY = imageVars.positionY
+        const worldWidth = image.width * pixelScale
+        const worldHeight = image.height * pixelScale
+
+        layer.expandTo(originX, originY)
+        layer.expandTo(originX + worldWidth, originY + worldHeight)
+
+        const [layerX, layerY] = layer.pos ?? [0, 0]
+        const [layerWidth, layerHeight] = layer.size ?? [1, 1]
+        const layerBounds = {
+          minX: layerX,
+          minY: layerY,
+          maxX: layerX + layerWidth,
+          maxY: layerY + layerHeight,
+        }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = image.width
+        canvas.height = image.height
+        const context = canvas.getContext('2d')
+        if (!context) {
+          updateCanvas()
+          return
+        }
+        context.imageSmoothingEnabled = false
+        context.drawImage(image, 0, 0)
+        const { data } = context.getImageData(0, 0, image.width, image.height)
+
+        const colorToArea = new Map()
+
+        const ensureArea = (hexColor) => {
+          if (colorToArea.has(hexColor)) return colorToArea.get(hexColor)
+          const existing = layer.areas.find(areaItem => areaItem.color.toLowerCase() === hexColor)
+          if (existing) {
+            colorToArea.set(hexColor, existing)
+            return existing
           }
+          const area = new Area(null, hexColor, layer, hexColor)
+          layer.areas.push(area)
+          colorToArea.set(hexColor, area)
+          return area
+        }
 
-          console.log(imageVars.image.width, imageVars.image.height, imageVars.scale);
-          for (let x = 0; x < imageVars.image.width; x++) {
-            for (let y = 0; y < imageVars.image.height; y++) {
-              const worldX = imageVars.positionX + x * imageVars.scale
-              const worldY = imageVars.positionY + y * imageVars.scale
-              const color = getColor(x, y)
-              let area = layer.areas.find(a => a.name === color)
-              if (!area) {
-                area = new Area(null, color, layer, color)
-                sendMessage(`NEWA:${layer.id}:${color}:${color}`)
-                layer.areas.push(area)
-              }
-              const precision = 1 / camera.zoom;
-              const bound = { minX: worldX, minY: worldY, maxX: worldX + imageVars.scale, maxY: worldY + imageVars.scale }
-              sendMessage(`RECT:${layer.id}:${bound.minX},${bound.minY}:${bound.maxX},${bound.maxY}:${area.id}:${precision}-`)
+        const depth = Math.max(0, Math.log2(layerWidth / Math.max(pixelScale, Number.EPSILON)))
+
+        const toHex = (r, g, b) => `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+
+        const totalPixels = image.width * image.height
+        if (totalPixels === 0) {
+          onImageProcessingStart()
+          onImageProcessingProgress({ percent: 1, stage: '완료', etaSeconds: 0 })
+          onImageProcessingComplete()
+          imageVars.image = null
+          updateCanvas()
+          return
+        }
+
+        const extraSteps = 2
+        const totalWork = totalPixels + extraSteps
+        let processedPixels = 0
+        let extraCompleted = 0
+
+        const yieldEvery = Math.max(1, Math.floor(image.height / 60))
+        const yieldControl = () => new Promise(resolve => {
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => resolve())
+          } else {
+            setTimeout(resolve, 0)
+          }
+        })
+
+        const nowMs = () => (typeof performance !== 'undefined' && typeof performance.now === 'function')
+          ? performance.now()
+          : Date.now()
+        const startTime = nowMs()
+
+        const reportProgress = (stage) => {
+          const processedUnits = Math.min(totalWork, processedPixels + extraCompleted)
+          const elapsedSeconds = (nowMs() - startTime) / 1000
+          let eta = null
+          if (processedUnits > 0 && processedUnits < totalWork && elapsedSeconds > 1e-6) {
+            const rate = processedUnits / elapsedSeconds
+            if (rate > 1e-6) {
+              eta = (totalWork - processedUnits) / rate
             }
           }
-          sendMessage('LOADALL');
+          const percent = totalWork === 0 ? 1 : processedUnits / totalWork
+          onImageProcessingProgress({
+            percent,
+            stage,
+            etaSeconds: eta,
+          })
+        }
+
+        let processingStarted = false
+        onImageProcessingStart()
+        processingStarted = true
+        reportProgress('초기화 중')
+
+        try {
+          await yieldControl()
+          sendMessage('SNAP')
+
+          for (let y = 0; y < image.height; y++) {
+            for (let x = 0; x < image.width; x++) {
+              const index = (y * image.width + x) * 4
+              const alpha = data[index + 3]
+              if (alpha >= 16) {
+                const r = data[index]
+                const g = data[index + 1]
+                const b = data[index + 2]
+                const hexColor = toHex(r, g, b).toLowerCase()
+
+                const area = ensureArea(hexColor)
+
+                const minX = originX + x * pixelScale
+                const minY = originY + y * pixelScale
+                const maxX = minX + pixelScale
+                const maxY = minY + pixelScale
+
+                quadtree.drawRect(minX, minY, maxX, maxY, area.id, depth, layerBounds)
+              }
+
+              processedPixels += 1
+              reportProgress('픽셀 변환 중')
+            }
+
+            if (y % yieldEvery === 0) {
+              await yieldControl()
+            }
+          }
+
+          reportProgress('픽셀 변환 중')
+
+          extraCompleted = Math.min(extraSteps, extraCompleted + 1)
+          reportProgress('레이어 압축 중')
+          await yieldControl()
+
+          const payload = {
+            parentId: layer.parent ? layer.parent.id : null,
+            layer: serializeLayerCompact(layer),
+          }
+
+          extraCompleted = Math.min(extraSteps, extraCompleted + 1)
+          reportProgress('레이어 전송 중')
+          await yieldControl()
+
+          sendMessage(`SET_LAYER:${layer.id}:${JSON.stringify(payload)}`)
+        } catch (error) {
+          console.warn('Image processing failed', error)
+          reportProgress('오류 발생')
+        } finally {
+          if (processingStarted) {
+            extraCompleted = extraSteps
+            reportProgress('마무리 중')
+            onImageProcessingComplete()
+          }
+          imageVars.image = null
+          updateCanvas()
         }
       },
       onmousedown: (event) => {
@@ -733,6 +859,9 @@ export function createCanvasController(options) {
     getWs,
     isConnected,
     onMousePositionChange = () => {},
+    onImageProcessingStart = () => {},
+    onImageProcessingProgress = () => {},
+    onImageProcessingComplete = () => {},
   } = options
 
   let canvas = null
@@ -787,6 +916,9 @@ export function createCanvasController(options) {
       if (!socket || !isConnected?.()) return
       socket.send(message)
     },
+    onImageProcessingStart,
+    onImageProcessingProgress,
+    onImageProcessingComplete,
   })
 
   function sendCursorMessage(x, y) {

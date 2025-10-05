@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Map, Layer, Area, Quadtree } from './dataframe.js';
+import {
+  Map,
+  Layer,
+  Area,
+  Quadtree,
+  serializeMapCompact,
+  deserializeMapCompact,
+  serializeLayerCompact,
+  deserializeLayerCompact,
+} from './dataframe.js';
 import { saveMapToFile, loadMapFromFile } from './dataframe-fs.js';
 
 function sampleQuadtreeValue(tree, x, y, bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 }) {
@@ -198,6 +207,50 @@ const tests = [
       assert.equal(loaded.layer.children[0].name, 'child');
 
       await fs.rm(tempDir, { recursive: true, force: true });
+    },
+  },
+  {
+    name: 'Compact map serialization preserves quadtree data',
+    run: () => {
+      const rootLayer = new Layer(undefined, new Quadtree(0), null, [0, 0], [4, 4], 'root');
+      const area = new Area(undefined, '#abcdef', rootLayer, 'color');
+      rootLayer.areas.push(area);
+      const bounds = { minX: rootLayer.pos[0], minY: rootLayer.pos[1], maxX: rootLayer.pos[0] + rootLayer.size[0], maxY: rootLayer.pos[1] + rootLayer.size[1] };
+      rootLayer.quadtree.drawRect(0, 0, 2, 2, area.id, 4, bounds);
+
+      const map = new Map('compact', rootLayer);
+      const payload = serializeMapCompact(map);
+      const restored = deserializeMapCompact(payload);
+
+      assert.equal(restored.name, 'compact');
+      const restoredLayer = restored.findLayer(rootLayer.id);
+      assert(restoredLayer);
+      const restoredBounds = { minX: restoredLayer.pos[0], minY: restoredLayer.pos[1], maxX: restoredLayer.pos[0] + restoredLayer.size[0], maxY: restoredLayer.pos[1] + restoredLayer.size[1] };
+      const inside = sampleQuadtreeValue(restoredLayer.quadtree, 1, 1, restoredBounds);
+      const outside = sampleQuadtreeValue(restoredLayer.quadtree, 3, 3, restoredBounds);
+      assert.equal(inside, area.id);
+      assert.equal(outside, 0);
+      assert.equal(restoredLayer.areas.length, rootLayer.areas.length);
+    },
+  },
+  {
+    name: 'Map.replaceLayer swaps compactly deserialized layers',
+    run: () => {
+      const parent = new Layer(undefined, new Quadtree(0), null, [0, 0], [8, 8], 'parent');
+      const child = new Layer(undefined, new Quadtree(7), parent, [0, 0], [2, 2], 'child');
+      parent.children.push(child);
+      const map = new Map('replace', parent);
+
+      const layerPayload = serializeLayerCompact(child);
+      const replacement = deserializeLayerCompact(layerPayload, null);
+      replacement.name = 'updated-child';
+
+      const replaced = map.replaceLayer(replacement, parent.id);
+      assert.equal(replaced, true);
+      assert.equal(parent.children.length, 1);
+      assert.equal(parent.children[0].name, 'updated-child');
+      assert.equal(parent.children[0].parent, parent);
+      assert.equal(parent.children[0].quadtree.value, 7);
     },
   },
 ];

@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { loadMapFromFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { Map, Layer, Area, Quadtree, serializeMap } from './dataframe.js';
+import { Map, Layer, Area, Quadtree, serializeMap, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
 
 const PORT = 48829;
 const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
@@ -16,6 +16,7 @@ if (fs.existsSync('map.gaia')) {
 }
 
 const clients = new Set();
+const compactClients = new Set();
 const snapshots = [];
 async function handleMessage(ws, message) {
   console.log(`📩 Received: ${message}`);
@@ -77,9 +78,14 @@ async function handleMessage(ws, message) {
       ws.send('ERR Not logged in');
       return;
     }
-    const broadcastMessage = `MAP:${JSON.stringify(serializeMap(map))}`;
+    const compactPayload = JSON.stringify(serializeMapCompact(map));
+    const fallbackPayload = JSON.stringify(serializeMap(map));
     for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
+      if (compactClients.has(clientWs)) {
+        clientWs.send(`MAPC:${compactPayload}`);
+      } else {
+        clientWs.send(`MAP:${fallbackPayload}`);
+      }
     }
     return;
   }
@@ -91,6 +97,104 @@ async function handleMessage(ws, message) {
       return;
     }
     ws.send(`MAP:${JSON.stringify(serializeMap(map))}`);
+    return;
+  }
+
+  const LOAD_COMPACT_RE = /^LOADC$/;
+  if (message.match(LOAD_COMPACT_RE)) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    compactClients.add(ws);
+    ws.send(`MAPC:${JSON.stringify(serializeMapCompact(map))}`);
+    return;
+  }
+
+  const LOAD_LAYER_RE = /^LOAD_LAYER:(\d+)$/;
+  const loadLayerMatch = message.match(LOAD_LAYER_RE);
+  if (loadLayerMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    compactClients.add(ws);
+
+    const layerId = Number(loadLayerMatch[1]);
+    const layer = map.findLayer(layerId);
+    if (!layer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    const payload = {
+      parentId: layer.parent ? layer.parent.id : null,
+      layer: serializeLayerCompact(layer),
+    };
+
+    ws.send(`LAYER:${JSON.stringify(payload)}`);
+    return;
+  }
+
+  const SET_LAYER_RE = /^SET_LAYER:(\d+):(.+)$/;
+  const setLayerMatch = message.match(SET_LAYER_RE);
+  if (setLayerMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+
+    const layerId = Number(setLayerMatch[1]);
+    const existingLayer = map.findLayer(layerId);
+    if (!existingLayer) {
+      ws.send('ERR Invalid layer ID');
+      return;
+    }
+
+    compactClients.add(ws);
+
+    let payload;
+    try {
+      payload = JSON.parse(setLayerMatch[2]);
+    } catch (error) {
+      ws.send('ERR Invalid layer payload');
+      return;
+    }
+
+    if (!payload || typeof payload !== 'object' || !payload.layer) {
+      ws.send('ERR Missing layer payload');
+      return;
+    }
+
+    let nextLayer;
+    try {
+      nextLayer = deserializeLayerCompact(payload.layer, null);
+    } catch (error) {
+      console.error('Failed to deserialize layer payload', error);
+      ws.send('ERR Unable to deserialize layer');
+      return;
+    }
+
+    const parentId = payload.parentId ?? (existingLayer.parent ? existingLayer.parent.id : null);
+    const replaced = map.replaceLayer(nextLayer, parentId);
+    if (!replaced) {
+      ws.send('ERR Failed to replace layer');
+      return;
+    }
+
+    const updatedLayer = map.findLayer(layerId);
+    const layerPayload = JSON.stringify({ parentId, layer: serializeLayerCompact(updatedLayer) });
+    const mapFallback = JSON.stringify(serializeMap(map));
+
+    for (const [clientWs] of clients) {
+      if (compactClients.has(clientWs)) {
+        clientWs.send(`LAYER:${layerPayload}`);
+      } else {
+        clientWs.send(`MAP:${mapFallback}`);
+      }
+    }
+
+    ws.send('OK');
     return;
   }
 
@@ -507,9 +611,14 @@ async function handleMessage(ws, message) {
     }
     const snapshot = snapshots.pop();
     map = Map.fromJSON(JSON.parse(snapshot));
-    const broadcastMessage = `MAP:${JSON.stringify(serializeMap(map))}`;
+    const compactPayload = JSON.stringify(serializeMapCompact(map));
+    const fallbackPayload = JSON.stringify(serializeMap(map));
     for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
+      if (compactClients.has(clientWs)) {
+        clientWs.send(`MAPC:${compactPayload}`);
+      } else {
+        clientWs.send(`MAP:${fallbackPayload}`);
+      }
     }
     ws.send('OK Undo applied');
     return;
@@ -538,6 +647,7 @@ wss.on('connection', (ws, req) => {
 
   // 연결 종료 이벤트
   ws.on('close', () => {
+    compactClients.delete(ws);
     if (clients.has(ws)) {
       console.log(`❌ Client disconnected: ${clientIP}`);
       clients.delete(ws);
