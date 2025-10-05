@@ -535,6 +535,7 @@ function buildTools({
       onend: () => {
         if (imageVars.phase === 'resizing' && imageVars.image) {
           imageVars.phase = 'idle'
+          sendMessage("SNAP");
 
           const selectedArea = getSelectedArea()
           const layer = selectedArea?.parent
@@ -563,24 +564,24 @@ function buildTools({
             return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
           }
 
-          const imgWidth = imageVars.image.width * imageVars.scale
-          const imgHeight = imageVars.image.height * imageVars.scale 
-          for (let x = 0; x < imgWidth; x++) {
-            for (let y = 0; y < imgHeight; y++) {
+          console.log(imageVars.image.width, imageVars.image.height, imageVars.scale);
+          for (let x = 0; x < imageVars.image.width; x++) {
+            for (let y = 0; y < imageVars.image.height; y++) {
               const worldX = imageVars.positionX + x * imageVars.scale
               const worldY = imageVars.positionY + y * imageVars.scale
-              if (worldX < x1 || worldX > x2 || worldY < y1 || worldY > y2) continue
               const color = getColor(x, y)
               let area = layer.areas.find(a => a.name === color)
               if (!area) {
                 area = new Area(null, color, layer, color)
+                sendMessage(`NEWA:${layer.id}:${color}:${color}`)
                 layer.areas.push(area)
               }
+              const precision = 1 / camera.zoom;
               const bound = { minX: worldX, minY: worldY, maxX: worldX + imageVars.scale, maxY: worldY + imageVars.scale }
-              // quadtree.drawRect(worldX, worldY, worldX + imageVars.scale, worldY + imageVars.scale, area.id, undefined, bound)
-              sendMessage(`RECT:${layer.id}:${bound.minX},${bound.minY}:${bound.maxX},${bound.maxY}:${area.id}`)
+              sendMessage(`RECT:${layer.id}:${bound.minX},${bound.minY}:${bound.maxX},${bound.maxY}:${area.id}:${precision}-`)
             }
           }
+          sendMessage('LOADALL');
         }
       },
       onmousedown: (event) => {
@@ -985,7 +986,6 @@ export function createCanvasController(options) {
 
     const activeTool = getCurrentTool?.()
     if (activeTool && activeTool.onmouseup) {
-      console.log('mouseup', event)
       activeTool.onmouseup(event)
     }
   }

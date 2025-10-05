@@ -16,20 +16,8 @@ if (fs.existsSync('map.gaia')) {
 }
 
 const clients = new Set();
-let saveCounter = 1000;
 const snapshots = [];
 async function handleMessage(ws, message) {
-  saveCounter--;
-  if (saveCounter <= 0) {
-    saveCounter = 1000 * clients.size + 1000;
-    fs.writeFile('map.gaia', JSON.stringify(serializeMap(map)), (err) => {
-      if (err) {
-        console.error('Auto-save error:', err);
-      }
-    });
-    console.log('💾 Map auto-saved');
-  }
-
   console.log(`📩 Received: ${message}`);
 
   const ECHO_RE = /^ECHO:(.*)$/;
@@ -80,6 +68,19 @@ async function handleMessage(ws, message) {
     }
     // Here you would implement actual saving logic
     ws.send('OK Map saved');
+    return;
+  }
+
+  const LOADALL_RE = /^LOADALL$/;
+  if (message.match(LOADALL_RE)) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const broadcastMessage = `MAP:${JSON.stringify(serializeMap(map))}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
     return;
   }
 
@@ -350,7 +351,7 @@ async function handleMessage(ws, message) {
     return;
   }
 
-  const RECT_RE = /^RECT:(\d+):([0-9\-\.]+),([0-9\-\.]+):([0-9\-\.]+),([0-9\-\.]+):(\d+):([0-9\.]+)$/;
+  const RECT_RE = /^RECT:(\d+):([0-9\-\.]+),([0-9\-\.]+):([0-9\-\.]+),([0-9\-\.]+):(\d+):([0-9\.]+)(-?)$/;
   const rectMatch = message.match(RECT_RE);
   if (rectMatch) {
     if (![...clients].some(([clientWs]) => clientWs === ws)) {
@@ -364,6 +365,7 @@ async function handleMessage(ws, message) {
     const y2 = parseFloat(rectMatch[5]);
     const color = parseInt(rectMatch[6]);
     const precision = parseFloat(rectMatch[7]);
+    const boardcasting = rectMatch[8] !== '-';
 
     const layer = map.findLayer(layerId);
     if (!layer) {
@@ -380,11 +382,13 @@ async function handleMessage(ws, message) {
     const depth = Math.log2(layer.size[0] / precision);
     layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds);
 
-    const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
-    for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
+    if (boardcasting) {
+      const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
+      for (const [clientWs] of clients) {
+        clientWs.send(broadcastMessage);
+      }
+      ws.send('OK');
     }
-    ws.send('OK');
 
     return;
   }
