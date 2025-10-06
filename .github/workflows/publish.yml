@@ -4,10 +4,14 @@ on:
   push:
     branches:
       - deploy
-  workflow_dispatch:
+
+permissions:
+  contents: write        # 릴리스 생성에 필요
+  actions: read
+  metadata: read
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,9 +30,45 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 🔑 Fine-grained PAT 사용
-      - name: Build and publish release
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Build Electron app
         run: |
-          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish always
+          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish never
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: dist/**
+
+  release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: List downloaded artifacts
+        run: ls -R dist
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "Release v${{ github.run_number }}"
+          body: |
+            🚀 자동 생성된 빌드 릴리스입니다.
+            - 빌드 번호: ${{ github.run_number }}
+            - 브랜치: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/**/*
