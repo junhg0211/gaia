@@ -696,6 +696,41 @@ class Quadtree {
     this.version = 0;
   }
 
+  findValueAt(x, y) {
+    if (x < 0 || x > 1 || y < 0 || y > 1) {
+      return null;
+    }
+
+    if (this.isLeaf()) {
+      return this.value;
+    }
+
+    const midX = 0.5;
+    const midY = 0.5;
+    let childIndex;
+    if (x < midX) {
+      if (y < midY) {
+        childIndex = 0;
+      } else {
+        childIndex = 2;
+      }
+    } else {
+      if (y < midY) {
+        childIndex = 1;
+      } else {
+        childIndex = 3;
+      }
+    }
+
+    const child = this.getChild(childIndex);
+    if (!child) {
+      return this.value;
+    }
+    const newX = (x - (childIndex % 2) * midX) * 2;
+    const newY = (y - Math.floor(childIndex / 2) * midY) * 2;
+    return child.findValueAt(newX, newY);
+  }
+
   isLeaf() {
     return this.children === null;
   }

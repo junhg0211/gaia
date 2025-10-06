@@ -16,6 +16,8 @@ function buildTools({
   getMap,
   sendMessage,
   setCurrentTool,
+  setSelectedArea,
+  bumpMapUpdate,
   onImageProcessingStart = () => {},
   onImageProcessingProgress = () => {},
   onImageProcessingComplete = () => {},
@@ -445,7 +447,7 @@ function buildTools({
     {
       name: "거리 측정",
       icon: 'rulers',
-      hotkey: 'i',
+      hotkey: 'u',
       vars: lineVars,
       onstart: () => {
         lineVars.x = 0
@@ -1033,7 +1035,30 @@ function buildTools({
           console.log(`Merging area ${mergeVars.area.id} into ${to.id}`)
         }
       }
-    }
+    },
+    {
+      name: '스포이드',
+      icon: 'eyedropper',
+      hotkey: 'i',
+      onmouseup: (event) => {
+        if (event.button !== 0) return
+        const selectedArea = getSelectedArea()
+        const layer = selectedArea?.parent
+        const quadtree = layer?.quadtree
+        if (!layer || !quadtree) return
+
+        const x = camera.toWorldX(event.clientX)
+        const y = camera.toWorldY(event.clientY)
+        const areaX = (x - (layer.pos ? layer.pos[0] : 0)) / (layer.size ? layer.size[0] : 1)
+        const areaY = (y - (layer.pos ? layer.pos[1] : 0)) / (layer.size ? layer.size[1] : 1)
+        const areaId = quadtree.findValueAt(areaX, areaY) ?? 0
+        const area = layer.areas.find(a => a.id === areaId)
+        if (!area) return
+
+        setSelectedArea(area)
+        bumpMapUpdate()
+      }
+    },
   ]
 
   return tools
@@ -1048,6 +1073,8 @@ export function createCanvasController(options) {
     getSelectedArea,
     getWs,
     isConnected,
+    setSelectedArea,
+    bumpMapUpdate,
     onMousePositionChange = () => {},
     onImageProcessingStart = () => {},
     onImageProcessingProgress = () => {},
@@ -1103,6 +1130,8 @@ export function createCanvasController(options) {
     getSelectedArea,
     getMap,
     setCurrentTool,
+    setSelectedArea,
+    bumpMapUpdate,
     sendMessage: (message) => {
       const socket = getWs?.()
       if (!socket || !isConnected?.()) return

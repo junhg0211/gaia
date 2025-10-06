@@ -62,6 +62,8 @@
     getCursors: () => cursors,
     getSelectedArea: () => selectedArea,
     getWs: () => ws,
+    setSelectedArea: (area) => { selectedArea = area },
+    bumpMapUpdate: () => { mapUpdate = (mapUpdate + 1) % 1000000 },
     isConnected: () => connected,
     onImageProcessingStart: () => {
       imageProgress = { percent: 0, stage: '준비 중', etaSeconds: null }
