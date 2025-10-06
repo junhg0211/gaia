@@ -17,17 +17,14 @@ jobs:
             artifact_globs: |
               dist/*.AppImage
               dist/*.deb
-              dist/*.zip
           - os: macos-latest
             target: mac
             artifact_globs: |
               dist/*.dmg
-              dist/*.zip
           - os: windows-latest
             target: win
             artifact_globs: |
               dist/*.exe
-              dist/*.zip
 
     steps:
       - name: Checkout repository
