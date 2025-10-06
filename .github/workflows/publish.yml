@@ -5,11 +5,6 @@ on:
     branches:
       - deploy
 
-permissions:
-  contents: write        # 릴리스 생성에 필요
-  actions: read
-  metadata: read
-
 jobs:
   build-and-release:
     runs-on: ${{ matrix.os }}
