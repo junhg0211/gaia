@@ -27,6 +27,7 @@
     "asar": true,
     "icon": "assets/icon",
     "files": [
+      "dist/**/*",
       "renderer/dist/**/*",
       "index.js",
       "ws-server.js",
