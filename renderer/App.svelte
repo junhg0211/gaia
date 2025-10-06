@@ -251,8 +251,6 @@
         {#key mapUpdate}
         <Map {data} {selectedArea} {map} {ws} on:areaselect={handleAreaSelect} />
         {/key}
-        {:else}
-        <div>No map loaded</div>
         {/if}
       </div>
       <div class="log" bind:this={logContainer}>
@@ -391,5 +389,21 @@
     padding: 0.5rem 1rem;
     font-size: 1rem;
     cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    margin: 4px;
+  }
+  button:hover:not(:disabled) {
+    background-color: #ddd;
+  }
+  button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  input[type="text"] {
+    padding: 0.4rem 0.6rem;
+    font-size: 1rem;
+    margin-right: 0.5rem;
   }
 </style>
