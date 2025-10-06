@@ -28,10 +28,6 @@ jobs:
       - name: Build UI
         run: npm run build
 
-      - name: Build Electron app
-        run: |
-          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish never
-
       # 🧩 빌드 직후 곧바로 릴리스 업로드 (압축 깨짐 방지)
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
