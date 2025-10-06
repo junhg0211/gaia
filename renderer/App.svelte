@@ -10,7 +10,7 @@
   let map
   let log = []
   const cursors = {}
-  let username = 'User'
+  let username = `User${randomColor()}`
   let mapUpdate = 0
   let wsAddress = 'localhost'
   let imageProgress = null
@@ -185,6 +185,17 @@
     canvasController.toggleGrid()
     redrawCanvas()
   }
+
+  function randomColor() {
+    return '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')
+  }
+
+  function disconnect() {
+    if (ws) {
+      ws.close()
+    }
+    connected = false
+  }
 </script>
 
 <svelte:head>
@@ -201,21 +212,20 @@
 
 <div class="main-container">
   <div class="header">
+    <button on:click={toggleGrid}><i class="bi bi-grid-3x3-gap"></i></button>
     <div class="spacer"></div>
-    {#if connected}
-      <div>
-        <button on:click={toggleGrid}><i class="bi bi-grid-3x3-gap"></i></button>
-        <button on:click={undoMap}><i class="bi bi-arrow-counterclockwise"></i></button>
-        <button on:click={saveMap}><i class="bi bi-floppy"></i></button>
-        <button on:click={reloadMap}><i class="bi bi-arrow-clockwise"></i></button>
-      </div>
-    {:else}
-      <div>
-        <input type="text" placeholder="Username" bind:value={username} />
-        <input type="text" placeholder="localhost:48829" bind:value={wsAddress} />
-        <button on:click={connect}><i class="bi bi-ethernet"></i></button>
-      </div>
-    {/if}
+    <div>
+      {#if connected}
+      <button on:click={undoMap}><i class="bi bi-arrow-counterclockwise"></i></button>
+      <button on:click={disconnect}><i class="bi bi-x-circle"></i></button>
+      <button on:click={saveMap}><i class="bi bi-floppy"></i></button>
+      <button on:click={reloadMap}><i class="bi bi-arrow-clockwise"></i></button>
+      {:else}
+      <input type="text" placeholder="Username" bind:value={username} />
+      <input type="text" placeholder="IP Address" bind:value={wsAddress} />
+      <button on:click={connect}><i class="bi bi-ethernet"></i></button>
+      {/if}
+    </div>
   </div>
   <div class="content">
     <div class="toolbar-window">
@@ -405,5 +415,12 @@
     padding: 0.4rem 0.6rem;
     font-size: 1rem;
     margin-right: 0.5rem;
+    border: none;
+    border-bottom: 1px solid #ccc;
+    outline: none;
+    transition: border 0.2s;
+  }
+  input[type="text"]:focus {
+    border-bottom: 2px solid #2f80ed;
   }
 </style>

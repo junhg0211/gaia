@@ -1279,9 +1279,16 @@ export function createCanvasController(options) {
       const cursor = cursorPositions[id]
       const screenX = camera.toScreenX(cursor.x)
       const screenY = camera.toScreenY(cursor.y)
-      ctx.fillStyle = 'red'
+      const color = /.*#([0-9a-fA-F]{6})/.exec(id) ? `#${/.*#([0-9a-fA-F]{6})/.exec(id)[1]}` : 'red'
+      ctx.fillStyle = color
       ctx.beginPath()
-      ctx.arc(screenX, screenY, 5, 0, Math.PI * 2)
+      ctx.moveTo(screenX, screenY)
+      ctx.lineTo(screenX + 10, screenY + 4)
+      ctx.lineTo(screenX + 4, screenY + 10)
+      ctx.lineTo(screenX, screenY + 6)
+      ctx.lineTo(screenX - 4, screenY + 10)
+      ctx.lineTo(screenX - 10, screenY + 4)
+      ctx.closePath()
       ctx.fill()
       ctx.fillStyle = 'black'
       ctx.fillText(id, screenX + 8, screenY - 8)
