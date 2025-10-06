@@ -1,7 +1,10 @@
 {
   "name": "gaia",
   "version": "0.1.0",
-  "author": "Zasoque Scîe",
+  "author": {
+    "name": "Sch",
+    "email": "junhg0211@gmail.com"
+  },
   "description": "Mapping tool for infinite worlds",
   "private": true,
   "type": "module",

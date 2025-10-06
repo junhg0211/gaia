@@ -38,6 +38,6 @@ jobs:
 
       - name: Build and package Electron app
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           npx electron-builder --${{ matrix.build-target }} --publish always
