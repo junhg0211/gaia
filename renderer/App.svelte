@@ -6,7 +6,7 @@
   import { createWebSocketManager } from './websocketManager.js'
 
   let ws
-  let connected = false
+  let connected = true
   let map
   let log = []
   const cursors = {}
@@ -164,6 +164,12 @@
     }
     window.addEventListener('keydown', handleKeydown)
     removeKeydownListener = () => window.removeEventListener('keydown', handleKeydown)
+
+    if (wsAddress) {
+      connect()
+    } else {
+      connected = false
+    }
   })
 
   onDestroy(() => {
