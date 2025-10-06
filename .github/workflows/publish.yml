@@ -26,17 +26,14 @@ jobs:
         run: npm ci
 
       - name: Build Electron app
-        run: >
-          npx electron-builder
-          --${{ matrix.os == 'ubuntu-latest' && 'linux' ||
-                 matrix.os == 'macos-latest' && 'mac' || 'win' }}
-          --publish never
+        run: |
+          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish never
 
       # 🧩 빌드 직후 곧바로 릴리스 업로드 (압축 깨짐 방지)
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v${{ github.run_number }}
           name: "Release v${{ github.run_number }}"
