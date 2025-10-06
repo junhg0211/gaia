@@ -6,11 +6,6 @@ on:
       - deploy
   workflow_dispatch:
 
-permissions:
-  contents: write        # 릴리스 생성에 필요
-  actions: read
-  metadata: read
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
