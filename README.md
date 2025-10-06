@@ -31,6 +31,7 @@ npm install
 > 개발 모드에서는 Electron이 `http://127.0.0.1:5174`의 Vite dev server를 로드하므로, 해당 포트가 사용 중이면 먼저 해제해야 합니다.
 
 ### 프로덕션 실행 및 빌드
+- 배포판 다운로드: GitHub Releases에서 운영체제에 맞는 패키지를 내려받아 바로 실행할 수 있습니다.
 - 프로덕션 실행: `npm run start`
 - 프로덕션 실행 (Windows): `npm run start:windows`
 - 렌더러만 빌드: `npm run build:ui`
@@ -74,4 +75,4 @@ npm run test:dataframe
 - UI 변경 시 렌더러 스크린샷 혹은 스크린 레코딩 준비
 
 ## 라이선스
-저장소에 명시된 라이선스가 없습니다. 배포 또는 외부 공유 전 프로젝트 소유자와 상의하세요.
+이 프로젝트는 MIT License 하에 배포됩니다. 자세한 조건은 `LICENSE` 파일을 참고하세요.

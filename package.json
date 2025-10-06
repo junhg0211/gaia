@@ -1,11 +1,20 @@
 {
   "name": "gaia",
   "version": "0.1.1",
+  "license": "MIT",
   "author": {
     "name": "Sch",
     "email": "junhg0211@gmail.com"
   },
   "description": "Mapping tool for infinite worlds",
+  "homepage": "https://github.com/junhg0211/gaia#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/junhg0211/gaia.git"
+  },
+  "bugs": {
+    "url": "https://github.com/junhg0211/gaia/issues"
+  },
   "private": true,
   "type": "module",
   "main": "index.js",
@@ -35,12 +44,6 @@
       "dataframe-fs.js",
       "node_modules/**/*",
       "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "map.gaia",
-        "to": "resources/example-data/map.gaia"
-      }
     ],
     "publish": [
       {
