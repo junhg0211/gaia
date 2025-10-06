@@ -16,7 +16,7 @@
     "dev": "concurrently \"npm run dev:ui\" \"npm run dev:electron\" --kill-others",
     "dev:windows": "concurrently \"npm run dev:ui\" \"npm run dev:electron:windows\"",
     "build:ui": "vite build --config vite.config.js",
-    "build": "npm run build:ui && electron-builder",
+    "build": "npm run build:ui && electron-builder --publish=never",
     "test:dataframe": "node dataframe-test.js",
     "start": "npm run build:ui && NODE_ENV=production electron .",
     "start:windows": "npm run build:ui && set NODE_ENV=production && electron ."
