@@ -9,22 +9,9 @@ jobs:
   build-and-release:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            target: linux
-            artifact_globs: |
-              dist/*.AppImage
-              dist/*.deb
-          - os: macos-latest
-            target: mac
-            artifact_globs: |
-              dist/*.dmg
-          - os: windows-latest
-            target: win
-            artifact_globs: |
-              dist/*.exe
+        os: [windows-latest, macos-latest, ubuntu-latest]
+      fail-fast: false
 
     steps:
       - name: Checkout repository
@@ -39,47 +26,23 @@ jobs:
         run: npm ci
 
       - name: Build Electron app
-        run: npx electron-builder --${{ matrix.target }} --publish never
+        run: >
+          npx electron-builder
+          --${{ matrix.os == 'ubuntu-latest' && 'linux' ||
+                 matrix.os == 'macos-latest' && 'mac' || 'win' }}
+          --publish never
 
-      - name: Upload packaged artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.target }}
-          path: ${{ matrix.artifact_globs }}
-          if-no-files-found: error
-
-  release:
-    needs: build-and-release
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: List downloaded artifacts
-        run: ls -R dist
-
-      - name: Create GitHub Release
-        id: create_release
+      # 🧩 빌드 직후 곧바로 릴리스 업로드 (압축 깨짐 방지)
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           tag_name: v${{ github.run_number }}
           name: "Release v${{ github.run_number }}"
-          body: |
-            🚀 자동 생성된 빌드 릴리스입니다.
-            - 빌드 번호: ${{ github.run_number }}
-            - 브랜치: ${{ github.ref_name }}
           draft: false
           prerelease: false
           files: |
-            dist/**/*.AppImage
-            dist/**/*.deb
-            dist/**/*.dmg
-            dist/**/*.exe
+            dist/*.exe
+            dist/*.dmg
+            dist/*.deb
