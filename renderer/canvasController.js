@@ -1013,7 +1013,7 @@ function buildTools({
     {
       name: '영역 합치기',
       icon: 'link',
-      hotkey: 'g',
+      hotkey: 'r',
       vars: mergeVars,
       onstart: () => {
         mergeVars.area = getSelectedArea()
