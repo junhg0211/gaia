@@ -236,9 +236,9 @@ function buildTools({
       },
       onkeydown: (event) => {
         if (event.key === '[') {
-          lineVars.width = Math.max(1, lineVars.width - 1)
+          lineVars.width = Math.max(5, lineVars.width - 5)
         } else if (event.key === ']') {
-          lineVars.width = Math.min(100, lineVars.width + 1)
+          lineVars.width = Math.min(300, lineVars.width + 5)
         }
         updateCanvas()
       }
@@ -398,10 +398,10 @@ function buildTools({
       },
       onkeydown: (event) => {
         if (event.key === '[') {
-          brushVars.width = Math.max(1, brushVars.width - 1)
+          brushVars.width = Math.max(5, brushVars.width - 5)
           updateCanvas()
         } else if (event.key === ']') {
-          brushVars.width = Math.min(100, brushVars.width + 1)
+          brushVars.width = Math.min(300, brushVars.width + 5)
           updateCanvas()
         }
       },
