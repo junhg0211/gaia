@@ -110,16 +110,6 @@
     margin-top: 4px;
     margin-bottom: 4px;
   }
-  .add-area-inputs input[type="text"], .add-layer-inputs input[type="text"] {
-    margin-left: 4px;
-  }
-  input[type="color"] {
-    padding: 0;
-    border: none;
-    width: 32px;
-    vertical-align: middle;
-    background: none;
-  }
   .child-layers {
     margin-top: 8px;
   }

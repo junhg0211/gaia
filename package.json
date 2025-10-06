@@ -1,21 +1,69 @@
 {
   "name": "gaia",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "author": "Zasoque Scîe",
   "description": "Mapping tool for infinite worlds",
+  "private": true,
   "type": "module",
   "main": "index.js",
   "scripts": {
     "dev:ui": "vite --host",
-    "dev:electron": "(wait-on -t 1s http://localhost:5174 2> /dev/null || true) && NODE_ENV=development nodemon --watch ./ --exec electron .",
-    "dev:electron:windows": "powershell -NoLogo -NonInteractive -Command \"& { $env:NODE_ENV='development'; wait-on -t 1s http://localhost:5174 ^| Out-Null; $global:LASTEXITCODE = 0; nodemon --watch ./ --exec electron . }\"",
+    "dev:electron": "(wait-on -t 1000 http://127.0.0.1:5174 2> /dev/null || true) && NODE_ENV=development nodemon --watch index.js --watch ws-server.js --watch dataframe.js --watch dataframe-fs.js --ext js --exec electron .",
+    "dev:electron:windows": "powershell -NoLogo -NonInteractive -Command \"& { $env:NODE_ENV='development'; try { wait-on -t 1000 http://127.0.0.1:5174 | Out-Null } catch { }; nodemon --watch index.js --watch ws-server.js --watch dataframe.js --watch dataframe-fs.js --ext js --exec electron . }\"",
     "dev": "concurrently \"npm run dev:ui\" \"npm run dev:electron\" --kill-others",
     "dev:windows": "concurrently \"npm run dev:ui\" \"npm run dev:electron:windows\"",
     "build:ui": "vite build --config vite.config.js",
     "build": "npm run build:ui && electron-builder",
     "test:dataframe": "node dataframe-test.js",
     "start": "npm run build:ui && NODE_ENV=production electron .",
-    "start:windows": "npm run build:ui && set NODE_ENV=production&& electron ."
+    "start:windows": "npm run build:ui && set NODE_ENV=production && electron ."
+  },
+  "build": {
+    "appId": "org.shtelo.gaia",
+    "productName": "Gaia",
+    "asar": true,
+    "icon": "assets/icon",
+    "files": [
+      "renderer/dist/**/*",
+      "index.js",
+      "ws-server.js",
+      "dataframe.js",
+      "dataframe-fs.js",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "map.gaia",
+        "to": "resources/example-data/map.gaia"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "icon": "assets/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": [
+        "AppImage",
+        "deb",
+        "zip"
+      ],
+      "category": "Utility"
+    }
   },
   "dependencies": {
     "bootstrap-icons": "^1.13.1",
