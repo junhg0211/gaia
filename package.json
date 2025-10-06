@@ -51,14 +51,13 @@
     "win": {
       "icon": "assets/icon.ico",
       "target": [
-        "nsis",
+        "portable",
         "zip"
       ]
     },
     "linux": {
       "icon": "assets/icon.png",
       "target": [
-        "AppImage",
         "deb",
         "zip"
       ],
