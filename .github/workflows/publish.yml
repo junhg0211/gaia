@@ -1,4 +1,4 @@
-name: Deploy Electron App
+name: Build and Release Electron App
 
 on:
   push:
@@ -6,19 +6,18 @@ on:
       - deploy
   workflow_dispatch:
 
+permissions:
+  contents: write        # 릴리스 생성에 필요
+  actions: read
+  metadata: read
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            build-target: linux
-          - os: macos-latest
-            build-target: mac
-          - os: windows-latest
-            build-target: win
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
@@ -30,15 +29,11 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: |
-          npm ci
+        run: npm ci
 
-      - name: Build renderer assets
-        run: |
-          npm run build:ui
-
-      - name: Build and package Electron app
+      # 🔑 Fine-grained PAT 사용
+      - name: Build and publish release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          npx electron-builder --${{ matrix.build-target }} --publish always
+          npx electron-builder --${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'mac' || 'win' }} --publish always
