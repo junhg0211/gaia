@@ -6,6 +6,7 @@ import fs from 'fs';
 import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, deserializeMapCompact, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
 
 const PORT = 48829;
+const ZERO_AREA_THRESHOLD = 1e-9;
 const wss = new WebSocketServer({
   port: PORT,
   host: '0.0.0.0',
@@ -412,6 +413,60 @@ async function handleMessage(ws, message) {
     const broadcastMessage = `DELA:${areaId}`;
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const DELETE_ZERO_AREA_RE = /^DELZ$/;
+  if (message.match(DELETE_ZERO_AREA_RE)) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+
+    map.layer.calculateAllAreas();
+
+    const zeroAreas = [];
+    const collectZeroAreas = (layer) => {
+      for (const area of layer.areas) {
+        if (area.id === 0) continue;
+        const areaValue = Number.isFinite(area.area) ? area.area : 0;
+        if (areaValue <= ZERO_AREA_THRESHOLD) {
+          zeroAreas.push({ id: area.id, layer });
+        }
+      }
+      for (const child of layer.children) {
+        collectZeroAreas(child);
+      }
+    };
+
+    collectZeroAreas(map.layer);
+
+    if (zeroAreas.length === 0) {
+      ws.send('OK No zero-area regions found');
+      return;
+    }
+
+    const removedIds = [];
+    for (const { id, layer } of zeroAreas) {
+      let targetLayer = layer;
+      if (!(targetLayer instanceof Layer)) {
+        targetLayer = map.findLayer(layer.id);
+      }
+      if (!targetLayer) continue;
+      targetLayer.removeArea(id);
+      removedIds.push(id);
+    }
+
+    map.layer.calculateAllAreas();
+
+    ws.send(`OK Removed ${removedIds.length} zero-area regions`);
+
+    for (const removedId of removedIds) {
+      const broadcastMessage = `DELA:${removedId}`;
+      for (const [clientWs] of clients) {
+        clientWs.send(broadcastMessage);
+      }
     }
     return;
   }

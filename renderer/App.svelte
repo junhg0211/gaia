@@ -192,6 +192,12 @@
     redrawCanvas()
   }
 
+  function deleteZeroAreas() {
+    if (!connected || !ws || !map) return
+    ws.send('SNAP')
+    ws.send('DELZ')
+  }
+
   function randomColor() {
     return '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')
   }
@@ -218,7 +224,14 @@
 
 <div class="main-container">
   <div class="header">
-    <button on:click={toggleGrid}><i class="bi bi-grid-3x3-gap"></i></button>
+    <button on:click={toggleGrid} title="그리드 토글"><i class="bi bi-grid-3x3-gap"></i></button>
+    <button
+      on:click={deleteZeroAreas}
+      disabled={!connected || !map}
+      title="넓이 0 영역 삭제"
+    >
+      <i class="bi bi-eraser-fill"></i>
+    </button>
     <div class="spacer"></div>
     <div>
       {#if connected}
