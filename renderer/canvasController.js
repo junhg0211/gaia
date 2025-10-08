@@ -515,7 +515,7 @@ function buildTools({
         ctx.fillStyle = 'black'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'bottom'
-        ctx.fillText(`${distanceStr} m`, (startX + endX) / 2, (startY + endY) / 2 - 5)
+        ctx.fillText(`${distanceStr} km`, (startX + endX) / 2, (startY + endY) / 2 - 5)
       },
     },
     {
