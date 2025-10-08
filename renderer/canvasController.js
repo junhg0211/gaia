@@ -1,6 +1,13 @@
 import { tick } from 'svelte'
 import { Area, serializeLayerCompact } from '../dataframe.js'
 import { createMapRenderer } from './quadtreeRenderer.js'
+import {
+  formatWorldArea,
+  formatWorldCoordinate,
+  formatWorldDistance,
+  formatDistanceFromMeters,
+  worldToMeters,
+} from './units.js'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
@@ -822,9 +829,9 @@ function buildTools({
         ctx.fillStyle = 'black'
         ctx.textAlign = 'left'
         ctx.textBaseline = 'top'
-        const posText = `(${imageVars.positionX.toFixed(1)}, ${imageVars.positionY.toFixed(1)})`
-        const widthText = `W: ${(imageVars.image.width * imageVars.scale).toFixed(1)}`
-        const heightText = `H: ${(imageVars.image.height * imageVars.scale).toFixed(1)}`
+        const posText = `(${formatWorldCoordinate(imageVars.positionX)}, ${formatWorldCoordinate(imageVars.positionY)})`
+        const widthText = `W: ${formatWorldDistance(imageVars.image.width * imageVars.scale)}`
+        const heightText = `H: ${formatWorldDistance(imageVars.image.height * imageVars.scale)}`
         ctx.fillText(`${posText} ${widthText} ${heightText}`, x + 4, y + height + 4)
       },
       onmousemove: (event) => {
@@ -1001,7 +1008,7 @@ function buildTools({
         const screenY = camera.toScreenY(centroid.y)
 
         ctx.font = '14px Arial'
-        const areaStr = area >= 1e6 ? `${(area / 1e6).toFixed(2)} km²` : `${area.toFixed(2)} m²`
+        const areaStr = formatWorldArea(area)
         const textwidth = ctx.measureText(areaStr).width
         ctx.fillStyle = 'white'
         ctx.fillRect(screenX - textwidth / 2 - 4, screenY - 20, textwidth + 8, 16)
@@ -1101,7 +1108,7 @@ export function createCanvasController(options) {
     y: 0,
     zoom: 1,
     setZoom(zoom) {
-      this.zoom = clamp(zoom, 1 / 100000, 1000)
+      this.zoom = clamp(zoom, 1 / 100, 1000000)
     },
     toScreenX(worldX) {
       const width = canvas ? canvas.width : 0
@@ -1178,7 +1185,7 @@ export function createCanvasController(options) {
       mapRenderer.draw(map, ctx, canvas, camera)
     }
 
-    let unit = 0.1
+    let unit = 0.0001
     while (unit * camera.zoom < 60) {
       if (unit / Math.pow(10, Math.floor(Math.log10(unit))) === 1) {
         unit *= 2
@@ -1242,16 +1249,7 @@ export function createCanvasController(options) {
     ctx.strokeStyle = 'black'
     ctx.lineWidth = 1
     ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
-    const labelUnit = unit >= 1000
-      ? 'km'
-      : unit >= 1
-      ? 'm'
-      : 'cm'
-    const labelValue = unit >= 1000
-      ? (unit / 1000).toFixed(1)
-      : unit >= 1
-      ? unit.toFixed(0)
-      : (unit * 100).toFixed(0)
+    const unitMeters = worldToMeters(unit)
     for (let i = 0; i < repeats; i++) {
       const xPos = padding + i * scaleBarLength
       ctx.fillStyle = i % 2 === 0 ? 'white' : 'black'
@@ -1260,7 +1258,8 @@ export function createCanvasController(options) {
       ctx.font = '10px Arial'
       ctx.textAlign = 'right'
       ctx.textBaseline = 'bottom'
-      const label = `${(i + 1) * labelValue} ${labelUnit}`
+      const segmentMeters = (i + 1) * unitMeters
+      const label = formatDistanceFromMeters(segmentMeters)
       const textWidth = ctx.measureText(label).width
       ctx.fillStyle = 'white'
       ctx.fillRect(xPos + scaleBarLength - textWidth - 2, yPos - 14, textWidth + 4, 12)

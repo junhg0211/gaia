@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import "bootstrap-icons/font/bootstrap-icons.css";
+  import { formatWorldArea } from "./units.js";
 
   export let area;
   export let ws;
@@ -30,10 +31,6 @@
   }
 
   $: isSelected = selectedArea && selectedArea.id === area.id && selectedArea.parent === area.parent;
-
-  function thousandSeparator(x) {
-    return x.toFixed(3).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  }
 
   function addClipArea(event) {
     if (event.key === 'Enter') {
@@ -74,7 +71,7 @@
   </div>
   {#if area.id !== 0}
   <div class="smol">
-    #{area.id}, {thousandSeparator(area.area)} m²
+    #{area.id}, {formatWorldArea(area.area)}
   </div>
   {/if}
 </button>
