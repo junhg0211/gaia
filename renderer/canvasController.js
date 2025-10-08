@@ -734,36 +734,113 @@ function buildTools({
           await yieldControl()
           sendMessage('SNAP')
 
+          const alphaThreshold = 16
+          const visited = new Uint8Array(totalPixels)
+          const progressInterval = Math.max(1, Math.floor(totalPixels / 200))
+          const yieldPixelThreshold = Math.max(5000, Math.floor(totalPixels / 120))
+          let lastProgressPixels = 0
+          let lastYieldAt = 0
+
+          const maybeReport = (stage) => {
+            if (processedPixels - lastProgressPixels >= progressInterval || processedPixels === totalPixels) {
+              reportProgress(stage)
+              lastProgressPixels = processedPixels
+            }
+          }
+
+          const maybeYield = async () => {
+            if (processedPixels - lastYieldAt >= yieldPixelThreshold) {
+              await yieldControl()
+              lastYieldAt = processedPixels
+            }
+          }
+
+          // Group contiguous pixels with the same color into larger rectangles
+          // so we avoid per-pixel quadtree writes when importing images.
           for (let y = 0; y < image.height; y++) {
             for (let x = 0; x < image.width; x++) {
-              const index = (y * image.width + x) * 4
-              const alpha = data[index + 3]
-              if (alpha >= 16) {
-                const r = data[index]
-                const g = data[index + 1]
-                const b = data[index + 2]
-                const hexColor = toHex(r, g, b).toLowerCase()
+              const flatIndex = y * image.width + x
+              if (visited[flatIndex]) continue
 
-                const area = ensureArea(hexColor)
+              const baseIndex = flatIndex * 4
+              const alpha = data[baseIndex + 3]
 
-                const minX = originX + x * pixelScale
-                const minY = originY + y * pixelScale
-                const maxX = minX + pixelScale
-                const maxY = minY + pixelScale
-
-                quadtree.drawRect(minX, minY, maxX, maxY, area.id, depth, layerBounds)
+              if (alpha < alphaThreshold) {
+                visited[flatIndex] = 1
+                processedPixels += 1
+                maybeReport('픽셀 묶음 변환 중')
+                await maybeYield()
+                continue
               }
 
-              processedPixels += 1
-              reportProgress('픽셀 변환 중')
+              const r = data[baseIndex]
+              const g = data[baseIndex + 1]
+              const b = data[baseIndex + 2]
+              const hexColor = toHex(r, g, b).toLowerCase()
+              const area = ensureArea(hexColor)
+
+              let xEnd = x + 1
+              while (xEnd < image.width) {
+                const nextFlat = y * image.width + xEnd
+                if (visited[nextFlat]) break
+                const pixelIndex = nextFlat * 4
+                if (data[pixelIndex + 3] < alphaThreshold) break
+                if (data[pixelIndex] !== r || data[pixelIndex + 1] !== g || data[pixelIndex + 2] !== b) break
+                xEnd += 1
+              }
+
+              let yEnd = y + 1
+              let canExtend = true
+              while (canExtend && yEnd < image.height) {
+                for (let xx = x; xx < xEnd; xx++) {
+                  const extendFlat = yEnd * image.width + xx
+                  if (visited[extendFlat]) {
+                    canExtend = false
+                    break
+                  }
+                  const extendIndex = extendFlat * 4
+                  if (data[extendIndex + 3] < alphaThreshold) {
+                    canExtend = false
+                    break
+                  }
+                  if (data[extendIndex] !== r || data[extendIndex + 1] !== g || data[extendIndex + 2] !== b) {
+                    canExtend = false
+                    break
+                  }
+                }
+                if (canExtend) {
+                  yEnd += 1
+                }
+              }
+
+              const minX = originX + x * pixelScale
+              const minY = originY + y * pixelScale
+              const maxX = originX + xEnd * pixelScale
+              const maxY = originY + yEnd * pixelScale
+
+              quadtree.drawRect(minX, minY, maxX, maxY, area.id, depth, layerBounds)
+
+              for (let yy = y; yy < yEnd; yy++) {
+                const rowOffset = yy * image.width
+                visited.fill(1, rowOffset + x, rowOffset + xEnd)
+              }
+
+              const rectPixels = (xEnd - x) * (yEnd - y)
+              processedPixels += rectPixels
+              maybeReport('픽셀 묶음 변환 중')
+              await maybeYield()
+
+              x = xEnd - 1
             }
 
             if (y % yieldEvery === 0) {
               await yieldControl()
+              lastYieldAt = processedPixels
             }
           }
 
-          reportProgress('픽셀 변환 중')
+          processedPixels = totalPixels
+          reportProgress('픽셀 묶음 변환 중')
 
           extraCompleted = Math.min(extraSteps, extraCompleted + 1)
           reportProgress('레이어 압축 중')
