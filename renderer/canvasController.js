@@ -694,13 +694,50 @@ function buildTools({
         let extraCompleted = 0
 
         const yieldEvery = Math.max(1, Math.floor(image.height / 60))
-        const yieldControl = () => new Promise(resolve => {
-          if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(() => resolve())
-          } else {
-            setTimeout(resolve, 0)
+        const yieldControl = (() => {
+          const hasDocument = typeof document !== 'undefined'
+
+          const createFastYield = () => {
+            if (typeof MessageChannel !== 'undefined') {
+              const channel = new MessageChannel()
+              const pending = []
+              channel.port1.onmessage = () => {
+                const next = pending.shift()
+                if (next) next()
+              }
+              return () => new Promise(resolve => {
+                pending.push(resolve)
+                channel.port2.postMessage(null)
+              })
+            }
+
+            if (typeof queueMicrotask === 'function') {
+              return () => new Promise(resolve => queueMicrotask(resolve))
+            }
+
+            if (typeof setImmediate === 'function') {
+              return () => new Promise(resolve => setImmediate(resolve))
+            }
+
+            return () => new Promise(resolve => setTimeout(resolve, 0))
           }
-        })
+
+          const fastYield = createFastYield()
+          const rafYield = typeof requestAnimationFrame === 'function'
+            ? () => new Promise(resolve => requestAnimationFrame(() => resolve()))
+            : fastYield
+
+          const shouldSkipRaf = () => {
+            if (!hasDocument) return true
+            if (typeof document.hidden === 'boolean' && document.hidden) return true
+            if (typeof document.hasFocus === 'function' && !document.hasFocus()) return true
+            return false
+          }
+
+          return () => {
+            return shouldSkipRaf() ? fastYield() : rafYield()
+          }
+        })()
 
         const nowMs = () => (typeof performance !== 'undefined' && typeof performance.now === 'function')
           ? performance.now()
