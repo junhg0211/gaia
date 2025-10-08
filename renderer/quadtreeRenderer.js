@@ -1,4 +1,4 @@
-const MAX_BASE_TEXTURE_SIZE = 4096
+const MAX_BASE_TEXTURE_SIZE = 6144
 const DETAIL_RATIO_THRESHOLD = 1.05
 const MIN_DETAIL_SCREEN_SIZE = 0.75
 
@@ -42,6 +42,23 @@ function buildAreaColorMap(layer) {
     map.set(area.id, area.color)
   }
   return map
+}
+
+function computeQuadtreeDepth(root) {
+  if (!root) return 0
+  let maxDepth = 0
+  const stack = [{ node: root, depth: 0 }]
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()
+    if (!node) continue
+    if (depth > maxDepth) maxDepth = depth
+    if (!node.isLeaf() && node.children) {
+      for (const child of node.children) {
+        if (child) stack.push({ node: child, depth: depth + 1 })
+      }
+    }
+  }
+  return maxDepth
 }
 
 function renderTreeToCanvas(node, canvas, ctx, bounds, areaColors) {
@@ -112,6 +129,7 @@ function ensureLayerCache(layer, cacheStore) {
       basePixelsPerUnitY: 0,
       bounds: null,
       areaColors: new Map(),
+      treeDepth: 0,
     }
     cacheStore.set(layer, cache)
   }
@@ -129,6 +147,7 @@ function ensureLayerCache(layer, cacheStore) {
     cache.baseVersion = layer?.quadtree?.version ?? 0
     cache.areaSignature = computeAreaSignature(layer)
     cache.boundsSignature = `${bounds.minX},${bounds.minY},${bounds.maxX},${bounds.maxY}`
+    cache.treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
     return cache
   }
 
@@ -150,6 +169,7 @@ function ensureLayerCache(layer, cacheStore) {
     if (!canvas) {
       cache.baseCanvas = null
       cache.baseCtx = null
+      cache.treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
       return cache
     }
     canvas.width = canvasWidth
@@ -173,6 +193,7 @@ function ensureLayerCache(layer, cacheStore) {
     cache.bounds = bounds
     cache.basePixelsPerUnitX = cache.baseCanvas.width / width
     cache.basePixelsPerUnitY = cache.baseCanvas.height / height
+    cache.treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
   } else if (!cache.bounds || needsCanvas) {
     cache.bounds = bounds
     cache.basePixelsPerUnitX = cache.baseCanvas ? cache.baseCanvas.width / width : 0
@@ -189,7 +210,7 @@ function drawNodeAdaptive({
   canvas,
   camera,
   areaColors,
-  maxDepth = 64,
+  maxDepth = Number.POSITIVE_INFINITY,
 }) {
   if (!node || !ctx || !canvas) return
 
@@ -254,7 +275,8 @@ function drawLayerDirect(layer, ctx, canvas, camera, depth = 11) {
   if (!layer) return
   const areaColors = buildAreaColorMap(layer)
   const bounds = getLayerBounds(layer)
-  const effectiveDepth = Math.max(depth, 24)
+  const treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
+  const effectiveDepth = Math.max(depth, treeDepth + 1)
 
   if (layer.visible) {
     ctx.globalAlpha = layer.opacity ?? 1.0
@@ -285,7 +307,9 @@ export function createMapRenderer() {
 
     const cache = ensureLayerCache(layer, layerCache)
     const bounds = cache?.bounds ?? getLayerBounds(layer)
-    const effectiveDepth = Math.max(depth, 24)
+    const cachedDepth = cache?.treeDepth ?? 0
+    const treeDepth = cachedDepth || (layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0)
+    const effectiveDepth = Math.max(depth, treeDepth + 1)
 
     if (!cache || !cache.baseCanvas || !cache.baseCtx) {
       drawLayerDirect(layer, ctx, canvas, camera, effectiveDepth)
