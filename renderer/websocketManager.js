@@ -5,6 +5,7 @@ import {
   deserializeMap,
   deserializeMapCompact,
   deserializeLayerCompact,
+  buildClipContext,
 } from '../dataframe.js'
 
 export function createWebSocketManager({
@@ -128,9 +129,9 @@ export function createWebSocketManager({
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const depth = Math.log2(layer.size[0] / precision)
     const targetArea = map.findArea(areaId)
-    const clipAreas = targetArea?.clipAreas ?? []
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
     await yieldToUI()
-    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipAreas)
+    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipContext)
     await yieldToUI()
     layer.cleanup()
     await yieldToUI()
@@ -182,7 +183,7 @@ export function createWebSocketManager({
     const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const depth = Math.log2(layer.size[0] / precision)
     const targetArea = map.findArea(parsedAreaId)
-    const clipAreas = targetArea?.clipAreas ?? []
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
     await yieldToUI()
     layer.quadtree.drawRect(
       Math.min(x1, x2),
@@ -192,7 +193,7 @@ export function createWebSocketManager({
       parsedAreaId,
       depth,
       bounds,
-      clipAreas,
+      clipContext,
     )
     await yieldToUI()
     layer.cleanup()
@@ -250,9 +251,9 @@ export function createWebSocketManager({
     }
     const depth = Math.log2(layer.size[0] / precision)
     const targetArea = map.findArea(parsedAreaId)
-    const clipAreas = targetArea?.clipAreas ?? []
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
     await yieldToUI()
-    layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds, undefined, clipAreas)
+    layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds, undefined, clipContext)
     await yieldToUI()
     layer.cleanup()
     await yieldToUI()

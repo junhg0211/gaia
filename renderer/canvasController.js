@@ -855,7 +855,7 @@ function buildTools({
               const maxX = originX + xEnd * pixelScale
               const maxY = originY + yEnd * pixelScale
 
-              quadtree.drawRect(minX, minY, maxX, maxY, area.id, depth, layerBounds)
+              quadtree.drawRect(minX, minY, maxX, maxY, area.id, depth, layerBounds, null)
 
               for (let yy = y; yy < yEnd; yy++) {
                 const rowOffset = yy * image.width

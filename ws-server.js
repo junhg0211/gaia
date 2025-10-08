@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import { loadMapFromFile, saveMapToFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, deserializeMapCompact, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
+import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, deserializeMapCompact, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact, buildClipContext } from './dataframe.js';
 
 const PORT = 48829;
 const ZERO_AREA_THRESHOLD = 1e-9;
@@ -264,7 +264,7 @@ async function handleMessage(ws, message) {
 
     const depth = Math.log2(layer.size[0] / precision);
     const targetArea = map.findArea(color);
-    const clipAreas = targetArea?.clipAreas ?? [];
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? []);
     layer.quadtree.drawLine(
       x1,
       y1,
@@ -274,7 +274,7 @@ async function handleMessage(ws, message) {
       color,
       depth,
       bounds,
-      clipAreas
+      clipContext
     );
     layer.cleanup();
 
@@ -589,8 +589,8 @@ async function handleMessage(ws, message) {
 
     const depth = Math.log2(layer.size[0] / precision);
     const targetArea = map.findArea(color);
-    const clipAreas = targetArea?.clipAreas ?? [];
-    layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds, clipAreas);
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? []);
+    layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds, clipContext);
     layer.cleanup();
 
     if (boardcasting) {
@@ -751,8 +751,8 @@ async function handleMessage(ws, message) {
     const depth = Math.log2(layer.size[0] / precision);
     console.log(depth)
     const targetArea = map.findArea(color);
-    const clipAreas = targetArea?.clipAreas ?? [];
-    layer.quadtree.drawPolygon(newPoints, color, depth, bounds, undefined, clipAreas);
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? []);
+    layer.quadtree.drawPolygon(newPoints, color, depth, bounds, undefined, clipContext);
     layer.cleanup();
 
     const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;

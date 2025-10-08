@@ -50,6 +50,26 @@ function rectsOverlap(a, b) {
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
 }
 
+function rectFullyInside(inner, outer) {
+  return (
+    inner.minX >= outer.minX - EPSILON &&
+    inner.maxX <= outer.maxX + EPSILON &&
+    inner.minY >= outer.minY - EPSILON &&
+    inner.maxY <= outer.maxY + EPSILON
+  );
+}
+
+function clipHasRestrictions(clip) {
+  return !!(clip && clip.hasRestrictions);
+}
+
+function clipAllowsLeaf(clip, value, bounds) {
+  if (!clipHasRestrictions(clip)) return true;
+  if (clip.allowsValue(value)) return true;
+  if (clip.externalCovers(bounds)) return true;
+  return clip.externalIntersects(bounds);
+}
+
 function pointInRect(x, y, rect) {
   return x >= rect.minX - EPSILON && x <= rect.maxX + EPSILON && y >= rect.minY - EPSILON && y <= rect.maxY + EPSILON;
 }
@@ -781,40 +801,64 @@ class Quadtree {
     }
   }
 
-  canFillEntireNode(clipAreas) {
-    if (!clipAreas || clipAreas.length === 0) return true;
-    if (this.isLeaf()) return clipAreas.includes(this.value);
+  canFillEntireNode(clipContext, bounds) {
+    if (!clipContext || !clipContext.hasRestrictions) return true;
+    if (clipContext.externalCovers(bounds)) return true;
+
+    if (this.isLeaf()) {
+      return clipContext.allowsValue(this.value);
+    }
+
     if (!this.children || this.children.length !== 4) {
-      return clipAreas.includes(this.value);
+      return clipContext.allowsValue(this.value);
     }
-    for (const child of this.children) {
-      if (!child.canFillEntireNode(clipAreas)) return false;
+
+    const midX = (bounds.minX + bounds.maxX) / 2;
+    const midY = (bounds.minY + bounds.maxY) / 2;
+
+    const childBounds = [
+      { minX: bounds.minX, minY: bounds.minY, maxX: midX, maxY: midY },
+      { minX: midX, minY: bounds.minY, maxX: bounds.maxX, maxY: midY },
+      { minX: bounds.minX, minY: midY, maxX: midX, maxY: bounds.maxY },
+      { minX: midX, minY: midY, maxX: bounds.maxX, maxY: bounds.maxY },
+    ];
+
+    for (let i = 0; i < 4; i++) {
+      const child = this.children[i];
+      if (!child) {
+        if (!clipContext.allowsValue(this.value)) return false;
+        continue;
+      }
+      if (!child.canFillEntireNode(clipContext, childBounds[i])) return false;
     }
+
     return true;
   }
 
-  drawCircle(x, y, radius, value, depth = 11, bounds, clipAreas = []) {
+  drawCircle(x, y, radius, value, depth = 11, bounds, clipContext) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
     if (!circleIntersectsRect(x, y, radius, nodeBounds)) return;
 
     const fullyCovered = circleContainsRect(x, y, radius, nodeBounds);
+    const shouldForceDivide = clipContext && typeof clipContext.shouldSubdivide === 'function' ? clipContext.shouldSubdivide(nodeBounds, depth) : false;
 
-    if (fullyCovered || depth <= 0) {
-      if (this.canFillEntireNode(clipAreas)) {
-        this.set(value);
-        return;
-      }
-      if (this.isLeaf()) {
-        if (clipAreas.length === 0 || clipAreas.includes(this.value)) this.set(value);
-        return;
-      }
-      if (depth <= 0) {
-        // depth limit reached; reuse existing children
-      }
+    if ((fullyCovered || depth <= 0) && !shouldForceDivide && this.canFillEntireNode(clipContext, nodeBounds)) {
+      this.set(value);
+      return;
     }
 
-    this.divide();
+    if (depth <= 0 && !shouldForceDivide) {
+      if (!clipContext || clipAllowsLeaf(clipContext, this.value, nodeBounds)) {
+        this.set(value);
+      }
+      return;
+    }
+
+    if (fullyCovered && this.isLeaf() && !shouldForceDivide && (!clipContext || clipAllowsLeaf(clipContext, this.value, nodeBounds))) {
+      this.set(value);
+      return;
+    }
 
     const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
     const midY = (nodeBounds.minY + nodeBounds.maxY) / 2;
@@ -826,34 +870,40 @@ class Quadtree {
       { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY },
     ];
 
+    let subdivided = false;
+
     for (let i = 0; i < 4; i++) {
       const childBound = childBounds[i];
       if (!circleIntersectsRect(x, y, radius, childBound)) continue;
-      this.children[i].drawCircle(x, y, radius, value, depth - 1, childBound, clipAreas);
+      if (!subdivided) {
+        this.divide();
+        subdivided = true;
+      }
+      this.children[i].drawCircle(x, y, radius, value, depth - 1, childBound, clipContext);
     }
 
-    this.tryMerge();
+    if (subdivided) {
+      this.tryMerge();
+    }
   }
 
-  drawPolygon(points, value, depth = 11, bounds, polygonBoundsCache, clipAreas = []) {
+  drawPolygon(points, value, depth = 11, bounds, polygonBoundsCache, clipContext) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     const polyBounds = polygonBoundsCache ?? polygonBounds(points);
 
     if (!rectsOverlap(nodeBounds, polyBounds)) return;
 
     const fullyCovered = polygonContainsRect(points, nodeBounds);
+    const shouldForceDivide = clipContext && typeof clipContext.shouldSubdivide === 'function' ? clipContext.shouldSubdivide(nodeBounds, depth) : false;
 
-    if (fullyCovered) {
-      if (this.canFillEntireNode(clipAreas)) {
-        this.set(value);
-        return;
-      }
-      if (this.isLeaf()) {
-        if (clipAreas.length === 0 || clipAreas.includes(this.value)) {
-          this.set(value);
-        }
-        return;
-      }
+    if (fullyCovered && !shouldForceDivide && this.canFillEntireNode(clipContext, nodeBounds)) {
+      this.set(value);
+      return;
+    }
+
+    if (fullyCovered && this.isLeaf() && !shouldForceDivide && (!clipContext || clipAllowsLeaf(clipContext, this.value, nodeBounds))) {
+      this.set(value);
+      return;
     }
 
     const intersects = polygonIntersectsRect(points, nodeBounds, polyBounds);
@@ -861,17 +911,15 @@ class Quadtree {
       return;
     }
 
-    if (depth <= 0) {
-      if (this.canFillEntireNode(clipAreas)) {
+    if (depth <= 0 && !shouldForceDivide) {
+      if (this.canFillEntireNode(clipContext, nodeBounds)) {
         this.set(value);
         return;
       }
-      if (this.isLeaf()) {
-        if (clipAreas.length === 0 || clipAreas.includes(this.value)) {
-          this.set(value);
-        }
-        return;
+      if (!clipContext || clipAllowsLeaf(clipContext, this.value, nodeBounds)) {
+        this.set(value);
       }
+      return;
     }
 
     const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
@@ -896,7 +944,7 @@ class Quadtree {
         subdivided = true;
       }
 
-      this.children[i].drawPolygon(points, value, depth - 1, childBound, polyBounds, clipAreas);
+      this.children[i].drawPolygon(points, value, depth - 1, childBound, polyBounds, clipContext);
     }
 
     if (subdivided) {
@@ -905,11 +953,11 @@ class Quadtree {
     }
   }
 
-  drawLine(x1, y1, x2, y2, width, value, depth = 11, bounds, clipAreas = []) {
+  drawLine(x1, y1, x2, y2, width, value, depth = 11, bounds, clipContext) {
     const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
-    this.drawCircle(x1, y1, width / 2, value, depth, nodeBounds, clipAreas);
-    this.drawCircle(x2, y2, width / 2, value, depth, nodeBounds, clipAreas);
+    this.drawCircle(x1, y1, width / 2, value, depth, nodeBounds, clipContext);
+    this.drawCircle(x2, y2, width / 2, value, depth, nodeBounds, clipContext);
 
     const dx = x2 - x1;
     const dy = y2 - y1;
@@ -936,7 +984,7 @@ class Quadtree {
       ];
     }
 
-    return this.drawPolygon(points, value, depth, nodeBounds, undefined, clipAreas);
+    return this.drawPolygon(points, value, depth, nodeBounds, undefined, clipContext);
   }
 
   expandBeing(index) {
@@ -985,14 +1033,14 @@ class Quadtree {
     this.markDirty();
   }
 
-  drawRect(minX, minY, maxX, maxY, value, depth = 11, bounds, clipAreas = []) {
+  drawRect(minX, minY, maxX, maxY, value, depth = 11, bounds, clipContext) {
     const points = [
       [minX, minY],
       [maxX, minY],
       [maxX, maxY],
       [minX, maxY],
     ];
-    return this.drawPolygon(points, value, depth, bounds, undefined, clipAreas);
+    return this.drawPolygon(points, value, depth, bounds, undefined, clipContext);
   }
 
   getValueAt(x, y, depth = 11, bounds) {
@@ -1043,6 +1091,84 @@ class Quadtree {
     }
 
     return child.getValueAt(x, y, depth - 1, childBounds);
+  }
+
+  isRectUniform(rect, value, bounds) {
+    const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+    if (!rectsOverlap(rect, nodeBounds)) {
+      return true;
+    }
+
+    if (this.isLeaf()) {
+      return this.value === value;
+    }
+
+    if (!this.children || this.children.length !== 4) {
+      return this.value === value;
+    }
+
+    const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
+    const midY = (nodeBounds.minY + nodeBounds.maxY) / 2;
+
+    const childBounds = [
+      { minX: nodeBounds.minX, minY: nodeBounds.minY, maxX: midX, maxY: midY },
+      { minX: midX, minY: nodeBounds.minY, maxX: nodeBounds.maxX, maxY: midY },
+      { minX: nodeBounds.minX, minY: midY, maxX: midX, maxY: nodeBounds.maxY },
+      { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY },
+    ];
+
+    for (let i = 0; i < 4; i++) {
+      const child = this.children[i];
+      const childBound = childBounds[i];
+      if (!rectsOverlap(rect, childBound)) continue;
+      if (!child) {
+        if (this.value !== value) return false;
+        continue;
+      }
+      if (!child.isRectUniform(rect, value, childBound)) return false;
+    }
+
+    return true;
+  }
+
+  rectHasValue(rect, value, bounds) {
+    const nodeBounds = bounds ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+    if (!rectsOverlap(rect, nodeBounds)) {
+      return false;
+    }
+
+    if (this.isLeaf()) {
+      return this.value === value;
+    }
+
+    if (!this.children || this.children.length !== 4) {
+      return this.value === value;
+    }
+
+    const midX = (nodeBounds.minX + nodeBounds.maxX) / 2;
+    const midY = (nodeBounds.minY + nodeBounds.maxY) / 2;
+
+    const childBounds = [
+      { minX: nodeBounds.minX, minY: nodeBounds.minY, maxX: midX, maxY: midY },
+      { minX: midX, minY: nodeBounds.minY, maxX: nodeBounds.maxX, maxY: midY },
+      { minX: nodeBounds.minX, minY: midY, maxX: midX, maxY: nodeBounds.maxY },
+      { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY },
+    ];
+
+    for (let i = 0; i < 4; i++) {
+      const child = this.children[i];
+      const childBound = childBounds[i];
+      if (!rectsOverlap(rect, childBound)) continue;
+      if (!child) {
+        if (this.value === value) return true;
+        continue;
+      }
+      if (child.rectHasValue(rect, value, childBound)) return true;
+    }
+
+    return false;
   }
 }
 
@@ -1284,11 +1410,91 @@ function deserializeMapCompact(data) {
   return new Map(data.name, layer);
 }
 
+function buildClipContext(map, layer, clipAreaIds) {
+  if (!map || !layer || !Array.isArray(clipAreaIds) || clipAreaIds.length === 0) {
+    return null;
+  }
+
+  const allowedValues = new Set();
+  const externalMasks = [];
+  const maxExtraDepth = 4;
+
+  for (const rawId of clipAreaIds) {
+    const areaId = Number(rawId);
+    if (!Number.isFinite(areaId)) continue;
+
+    const area = map.findArea(areaId);
+    if (!area) continue;
+
+    let parentLayer = area.parent;
+    if (!(parentLayer instanceof Layer)) {
+      const parentId = parentLayer && typeof parentLayer === 'object' ? parentLayer.id : parentLayer;
+      parentLayer = map.findLayer(parentId);
+    }
+
+    if (!parentLayer || !parentLayer.quadtree) continue;
+
+    if (parentLayer.id === layer.id) {
+      allowedValues.add(area.id);
+      continue;
+    }
+
+    const layerBounds = parentLayer.getBounds();
+    externalMasks.push({
+      covers(rect) {
+        if (!rectFullyInside(rect, layerBounds)) return false;
+        return parentLayer.quadtree.isRectUniform(rect, area.id, layerBounds);
+      },
+      intersects(rect) {
+        if (!rectsOverlap(rect, layerBounds)) return false;
+        return parentLayer.quadtree.rectHasValue(rect, area.id, layerBounds);
+      },
+    });
+  }
+
+  const hasRestrictions = allowedValues.size > 0 || externalMasks.length > 0;
+  if (!hasRestrictions) return null;
+
+  return {
+    hasRestrictions,
+    maxExtraDepth,
+    allowsValue(value) {
+      if (allowedValues.size === 0) return false;
+      return allowedValues.has(value);
+    },
+    externalCovers(rect) {
+      for (const mask of externalMasks) {
+        if (mask.covers(rect)) return true;
+      }
+      return false;
+    },
+    externalIntersects(rect) {
+      for (const mask of externalMasks) {
+        if (mask.intersects(rect)) return true;
+      }
+      return false;
+    },
+    requiresSubdivision(rect) {
+      for (const mask of externalMasks) {
+        if (mask.intersects(rect) && !mask.covers(rect)) return true;
+      }
+      return false;
+    },
+    shouldSubdivide(rect, depth) {
+      if (externalMasks.length === 0) return false;
+      if (!this.requiresSubdivision(rect)) return false;
+      if (typeof depth !== 'number') return this.requiresSubdivision(rect);
+      return depth > -maxExtraDepth;
+    },
+  };
+}
+
 export {
   Map,
   Layer,
   Area,
   Quadtree,
+  buildClipContext,
   serializeMap,
   deserializeMap,
   serializeMapCompact,

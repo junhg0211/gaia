@@ -7,6 +7,7 @@ import {
   Layer,
   Area,
   Quadtree,
+  buildClipContext,
   serializeMap,
   serializeMapCompact,
   deserializeMapCompact,
@@ -46,6 +47,29 @@ function sampleQuadtreeValue(tree, x, y, bounds = { minX: 0, minY: 0, maxX: 1, m
   if (!child) return tree.value;
 
   return sampleQuadtreeValue(child, x, y, childBounds);
+}
+
+function makeClipContext(ids) {
+  if (!ids || ids.length === 0) return null;
+  const allowed = new Set(ids);
+  return {
+    hasRestrictions: allowed.size > 0,
+    allowsValue(value) {
+      return allowed.has(value);
+    },
+    externalCovers() {
+      return false;
+    },
+    externalIntersects() {
+      return false;
+    },
+    requiresSubdivision() {
+      return false;
+    },
+    shouldSubdivide() {
+      return false;
+    },
+  };
 }
 
 const tests = [
@@ -152,7 +176,7 @@ const tests = [
 
       const bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
-      tree.drawRect(0, 0, 1, 1, 9, 4, bounds, [2, 4]);
+      tree.drawRect(0, 0, 1, 1, 9, 4, bounds, makeClipContext([2, 4]));
 
       assert.equal(tree.children[0].value, 1);
       assert.equal(tree.children[1].value, 9);
@@ -166,11 +190,67 @@ const tests = [
       const tree = new Quadtree(5);
       const bounds = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
-      tree.drawRect(0, 0, 1, 1, 9, 0, bounds, [3, 4]);
+      tree.drawRect(0, 0, 1, 1, 9, 0, bounds, makeClipContext([3, 4]));
       assert.equal(tree.value, 5);
 
-      tree.drawRect(0, 0, 1, 1, 9, 0, bounds, [5]);
+      tree.drawRect(0, 0, 1, 1, 9, 0, bounds, makeClipContext([5]));
       assert.equal(tree.value, 9);
+    },
+  },
+  {
+    name: 'Cross-layer clip allows painting only inside external mask',
+    run: () => {
+      const baseLayer = new Layer(undefined, new Quadtree(0), null, [0, 0], [16, 16], 'base');
+      const maskArea = new Area(undefined, '#ff0000', baseLayer, 'mask');
+      baseLayer.areas.push(maskArea);
+      const map = new Map('test', baseLayer);
+
+      const paintLayer = new Layer(undefined, new Quadtree(0), baseLayer, [0, 0], [16, 16], 'paint');
+      baseLayer.children.push(paintLayer);
+      const paintArea = new Area(undefined, '#00ff00', paintLayer, 'paint');
+      paintLayer.areas.push(paintArea);
+
+      const baseBounds = baseLayer.getBounds();
+      baseLayer.quadtree.drawRect(0, 0, 8, 8, maskArea.id, 4, baseBounds);
+
+      paintArea.clipAreas = [maskArea.id];
+      const clipContext = buildClipContext(map, paintLayer, paintArea.clipAreas);
+      const paintBounds = paintLayer.getBounds();
+      paintLayer.quadtree.drawRect(0, 0, 16, 16, paintArea.id, 4, paintBounds, clipContext);
+
+      const inside = sampleQuadtreeValue(paintLayer.quadtree, 4, 4, paintBounds);
+      const outside = sampleQuadtreeValue(paintLayer.quadtree, 12, 4, paintBounds);
+
+      assert.equal(inside, paintArea.id);
+      assert.equal(outside, 0);
+    },
+  },
+  {
+    name: 'Cross-layer clip fills mask boundaries densely',
+    run: () => {
+      const baseLayer = new Layer(undefined, new Quadtree(0), null, [0, 0], [32, 32], 'base');
+      const maskArea = new Area(undefined, '#ff0000', baseLayer, 'mask');
+      baseLayer.areas.push(maskArea);
+      const map = new Map('test', baseLayer);
+
+      const paintLayer = new Layer(undefined, new Quadtree(0), baseLayer, [0, 0], [32, 32], 'paint');
+      baseLayer.children.push(paintLayer);
+      const paintArea = new Area(undefined, '#00ff00', paintLayer, 'paint');
+      paintLayer.areas.push(paintArea);
+
+      const maskBounds = baseLayer.getBounds();
+      baseLayer.quadtree.drawRect(0, 0, 17, 24, maskArea.id, 5, maskBounds);
+
+      paintArea.clipAreas = [maskArea.id];
+      const clipContext = buildClipContext(map, paintLayer, paintArea.clipAreas);
+      const paintBounds = paintLayer.getBounds();
+      paintLayer.quadtree.drawRect(0, 0, 32, 32, paintArea.id, 5, paintBounds, clipContext);
+
+      const insideEdge = sampleQuadtreeValue(paintLayer.quadtree, 16.5, 12, paintBounds);
+      const justOutside = sampleQuadtreeValue(paintLayer.quadtree, 18.1, 12, paintBounds);
+
+      assert.equal(insideEdge, paintArea.id);
+      assert.equal(justOutside, 0);
     },
   },
   {
