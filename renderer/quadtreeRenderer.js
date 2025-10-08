@@ -1,6 +1,7 @@
-const MAX_BASE_TEXTURE_SIZE = 6144
+const MAX_BASE_TEXTURE_SIZE = 8192
 const DETAIL_RATIO_THRESHOLD = 1.05
-const MIN_DETAIL_SCREEN_SIZE = 0.75
+const MIN_DETAIL_SCREEN_SIZE = 1
+const SUB_PIXEL_SKIP_THRESHOLD = 1
 
 function canCreateCanvas() {
   if (typeof OffscreenCanvas !== 'undefined') return true
@@ -224,6 +225,13 @@ function drawNodeAdaptive({
   const rawMinY = Math.min(sy1, sy2)
   const rawMaxY = Math.max(sy1, sy2)
 
+  const rawWidth = rawMaxX - rawMinX
+  const rawHeight = rawMaxY - rawMinY
+
+  if (rawWidth < SUB_PIXEL_SKIP_THRESHOLD && rawHeight < SUB_PIXEL_SKIP_THRESHOLD) {
+    return
+  }
+
   const x = Math.floor(rawMinX)
   const y = Math.floor(rawMinY)
   const width = Math.ceil(rawMaxX) - x
@@ -235,7 +243,7 @@ function drawNodeAdaptive({
     return
   }
 
-  const screenTooSmall = width <= MIN_DETAIL_SCREEN_SIZE && height <= MIN_DETAIL_SCREEN_SIZE
+  const screenTooSmall = rawWidth <= MIN_DETAIL_SCREEN_SIZE && rawHeight <= MIN_DETAIL_SCREEN_SIZE
   const shouldStop = node.isLeaf() || screenTooSmall || maxDepth <= 0
 
   if (shouldStop) {
