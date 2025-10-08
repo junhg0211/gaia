@@ -22,25 +22,60 @@ export function createWebSocketManager({
 }) {
   let socket
 
+  const createYieldToUI = () => {
+    if (typeof window === 'undefined') {
+      return () => Promise.resolve()
+    }
+    if (typeof requestIdleCallback === 'function') {
+      return () => new Promise(resolve => requestIdleCallback(() => resolve(), { timeout: 16 }))
+    }
+    if (typeof requestAnimationFrame === 'function') {
+      return () => new Promise(resolve => requestAnimationFrame(() => resolve()))
+    }
+    if (typeof MessageChannel !== 'undefined') {
+      const channel = new MessageChannel()
+      const pending = []
+      channel.port1.onmessage = () => {
+        const next = pending.shift()
+        if (next) next()
+      }
+      return () => new Promise(resolve => {
+        pending.push(resolve)
+        channel.port2.postMessage(null)
+      })
+    }
+    return () => new Promise(resolve => setTimeout(resolve, 0))
+  }
+
+  const yieldToUI = createYieldToUI()
+  const messageQueue = []
+  let processingQueue = false
+
   const setConnected = (value) => {
     if (onConnectedChange) {
       onConnectedChange(value)
     }
   }
 
-  const handleMapMessage = (data) => {
+  const handleMapMessage = async (data) => {
     const mapData = data.slice(4)
+    await yieldToUI()
     const parsed = deserializeMap(JSON.parse(mapData))
     setMap(parsed)
+    await yieldToUI()
     parsed.layer.calculateAllAreas()
+    await yieldToUI()
     updateCanvas?.()
   }
 
-  const handleMapCompactMessage = (data) => {
+  const handleMapCompactMessage = async (data) => {
     const payload = data.slice(5)
+    await yieldToUI()
     const parsed = deserializeMapCompact(JSON.parse(payload))
     setMap(parsed)
+    await yieldToUI()
     parsed.layer.calculateAllAreas()
+    await yieldToUI()
     updateCanvas?.()
   }
 
@@ -75,7 +110,7 @@ export function createWebSocketManager({
     bumpMapUpdate?.()
   }
 
-  const handleLineMessage = (data) => {
+  const handleLineMessage = async (data) => {
     const payload = data.slice(5)
     let [layerId, from, to, areaAndWidth, precision] = payload.split(':')
     const [x1, y1] = from.split(',').map((value) => Number(value))
@@ -94,8 +129,11 @@ export function createWebSocketManager({
     const depth = Math.log2(layer.size[0] / precision)
     const targetArea = map.findArea(areaId)
     const clipAreas = targetArea?.clipAreas ?? []
+    await yieldToUI()
     layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipAreas)
+    await yieldToUI()
     layer.cleanup()
+    await yieldToUI()
     layer.calculateAreas()
     bumpMapUpdate?.()
     updateCanvas?.()
@@ -126,7 +164,7 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
-  const handleRectMessage = (data) => {
+  const handleRectMessage = async (data) => {
     const payload = data.slice(5)
     let [layerId, from, to, areaId, precision] = payload.split(':')
     const [x1, y1] = from.split(',').map((value) => Number(value))
@@ -145,6 +183,7 @@ export function createWebSocketManager({
     const depth = Math.log2(layer.size[0] / precision)
     const targetArea = map.findArea(parsedAreaId)
     const clipAreas = targetArea?.clipAreas ?? []
+    await yieldToUI()
     layer.quadtree.drawRect(
       Math.min(x1, x2),
       Math.min(y1, y2),
@@ -155,13 +194,15 @@ export function createWebSocketManager({
       bounds,
       clipAreas,
     )
+    await yieldToUI()
     layer.cleanup()
+    await yieldToUI()
     layer.calculateAreas()
     bumpMapUpdate?.()
     updateCanvas?.()
   }
 
-  const handleLayerMessage = (data) => {
+  const handleLayerMessage = async (data) => {
     const payload = data.slice(6)
     let parsed
     try {
@@ -177,7 +218,9 @@ export function createWebSocketManager({
     const map = getMap?.()
     if (!map) return
 
+    await yieldToUI()
     const nextLayer = deserializeLayerCompact(layerData, null)
+    await yieldToUI()
     const updated = map.replaceLayer(nextLayer, parentId === undefined ? null : parentId)
     if (!updated) return
 
@@ -185,7 +228,7 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
-  const handlePolygonMessage = (data) => {
+  const handlePolygonMessage = async (data) => {
     const payload = data.slice(5)
     let [layerId, pointsStr, areaId, precision] = payload.split(':')
     precision = parseFloat(precision) || 1
@@ -208,14 +251,17 @@ export function createWebSocketManager({
     const depth = Math.log2(layer.size[0] / precision)
     const targetArea = map.findArea(parsedAreaId)
     const clipAreas = targetArea?.clipAreas ?? []
+    await yieldToUI()
     layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds, undefined, clipAreas)
+    await yieldToUI()
     layer.cleanup()
+    await yieldToUI()
     layer.calculateAreas()
     bumpMapUpdate?.()
     updateCanvas?.()
   }
 
-  const handleFillMessage = (data) => {
+  const handleFillMessage = async (data) => {
     const payload = data.slice(5)
     const parts = payload.split(':')
     if (parts.length < 4) return
@@ -233,8 +279,11 @@ export function createWebSocketManager({
     if (!map) return
     const layer = map.findLayer(layerId)
     if (!layer) return
+    await yieldToUI()
     layer.floodFill(x, y, areaId, precision)
+    await yieldToUI()
     layer.cleanup()
+    await yieldToUI()
     layer.calculateAreas()
     bumpMapUpdate?.()
     updateCanvas?.()
@@ -300,7 +349,7 @@ export function createWebSocketManager({
     updateCanvas?.()
   }
 
-  const handleMergeAreasMessage = (data) => {
+  const handleMergeAreasMessage = async (data) => {
     const payload = data.slice(5)
     const [layerId, areaIds] = payload.split(':')
     const ids = areaIds.split(',').map((id) => Number(id))
@@ -309,7 +358,9 @@ export function createWebSocketManager({
     if (!map) return
     const layer = map.findLayer(Number(layerId))
     if (!layer) return
+    await yieldToUI()
     layer.mergeAreas(ids)
+    await yieldToUI()
     bumpMapUpdate?.()
     updateCanvas?.()
     saveMap?.()
@@ -350,11 +401,11 @@ export function createWebSocketManager({
     addLogEntry?.(`Error from server: ${message}`)
   }
 
-  const handleMessage = (data) => {
+  const handleMessage = async (data) => {
     if (data.startsWith('MAPC:')) {
-      handleMapCompactMessage(data)
+      await handleMapCompactMessage(data)
     } else if (data.startsWith('MAP:')) {
-      handleMapMessage(data)
+      await handleMapMessage(data)
     } else if (data.startsWith('CURSOR:')) {
       handleCursorMessage(data)
     } else if (data.startsWith('NEWA:')) {
@@ -362,19 +413,19 @@ export function createWebSocketManager({
     } else if (data.startsWith('NEWL:')) {
       handleNewLayerMessage(data)
     } else if (data.startsWith('LINE:')) {
-      handleLineMessage(data)
+      await handleLineMessage(data)
     } else if (data.startsWith('DELL:')) {
       handleDeleteLayerMessage(data)
     } else if (data.startsWith('DELA:')) {
       handleDeleteAreaMessage(data)
     } else if (data.startsWith('RECT:')) {
-      handleRectMessage(data)
+      await handleRectMessage(data)
     } else if (data.startsWith('POLY:')) {
-      handlePolygonMessage(data)
+      await handlePolygonMessage(data)
     } else if (data.startsWith('FILL:')) {
-      handleFillMessage(data)
+      await handleFillMessage(data)
     } else if (data.startsWith('LAYER:')) {
-      handleLayerMessage(data)
+      await handleLayerMessage(data)
     } else if (data.startsWith('DISCONNECT:')) {
       handleDisconnectMessage(data)
     } else if (data.startsWith('SEAN:')) {
@@ -386,13 +437,49 @@ export function createWebSocketManager({
     } else if (data.startsWith('LYOD:')) {
       handleSetLayerOrderMessage(data)
     } else if (data.startsWith('MERG:')) {
-      handleMergeAreasMessage(data)
+      await handleMergeAreasMessage(data)
     } else if (data.startsWith('ADDCLIP:')) {
       handleAddClipMessage(data)
     } else if (data.startsWith('REMCLIP:')) {
       handleRemoveClipMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
+    }
+  }
+
+  function enqueueMessage(data) {
+    messageQueue.push(data)
+    if (processingQueue) {
+      return
+    }
+    processingQueue = true
+    processQueue().catch(error => {
+      console.warn('Failed to process websocket message queue', error)
+    })
+  }
+
+  async function processQueue() {
+    try {
+      while (messageQueue.length > 0) {
+        const next = messageQueue.shift()
+        if (typeof next === 'undefined') {
+          continue
+        }
+        try {
+          await handleMessage(next)
+        } catch (error) {
+          console.warn('Failed to handle websocket message', error, { data: next })
+        }
+        await yieldToUI()
+      }
+    } finally {
+      processingQueue = false
+      if (messageQueue.length > 0 && !processingQueue) {
+        processingQueue = true
+        processQueue().catch(error => {
+          console.warn('Failed to resume websocket message queue', error)
+        })
+      }
     }
   }
 
@@ -423,7 +510,7 @@ export function createWebSocketManager({
       } else {
         addLogEntry?.(data)
       }
-      handleMessage(data)
+      enqueueMessage(data)
     }
     socket.onclose = () => {
       setConnected(false)
