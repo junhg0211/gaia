@@ -397,6 +397,38 @@ export function createWebSocketManager({
     bumpMapUpdate?.()
   }
 
+  const handleAreaPointMessage = (data) => {
+    const payload = data.slice(5)
+    const [areaIdStr, pos] = payload.split(':')
+    const areaId = Number(areaIdStr)
+    const [xStr, yStr] = pos.split(',')
+    const x = Number(xStr)
+    const y = Number(yStr)
+    if (!Number.isFinite(areaId) || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return
+    }
+    const map = getMap?.()
+    if (!map) return
+    const area = map.findArea(areaId)
+    if (!area) return
+    area.areaPoint = [x, y]
+    updateCanvas?.()
+  }
+
+  const handleRemoveAreaPointMessage = (data) => {
+    const payload = data.slice(11)
+    const areaId = Number(payload)
+    if (!Number.isFinite(areaId)) {
+      return
+    }
+    const map = getMap?.()
+    if (!map) return
+    const area = map.findArea(areaId)
+    if (!area) return
+    area.areaPoint = null
+    updateCanvas?.()
+  }
+
   const handleErrorMessage = (data) => {
     const message = data.slice(4)
     addLogEntry?.(`Error from server: ${message}`)
@@ -443,6 +475,10 @@ export function createWebSocketManager({
       handleAddClipMessage(data)
     } else if (data.startsWith('REMCLIP:')) {
       handleRemoveClipMessage(data)
+    } else if (data.startsWith('APNT:')) {
+      handleAreaPointMessage(data)
+    } else if (data.startsWith('AREARESETP:')) {
+      handleRemoveAreaPointMessage(data)
     } else if (data.startsWith('ERR:')) {
       handleErrorMessage(data)
     }

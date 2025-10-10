@@ -1180,6 +1180,34 @@ function buildTools({
         bumpMapUpdate()
       }
     },
+    {
+      name: '영역 점 도구',
+      icon: 'crosshair',
+      hotkey: 'c',
+      onmouseup: (event) => {
+        if (event.button !== 0) return
+        const selectedArea = getSelectedArea()
+        if (!selectedArea) return
+        const rect = ensureCanvasRect()
+        if (!rect) return
+        const x = camera.toWorldX(event.clientX - rect.left)
+        const y = camera.toWorldY(event.clientY - rect.top)
+        sendMessage('SNAP')
+        sendMessage(`APNT:${selectedArea.id}:${x},${y}`)
+      }
+    },
+    {
+      name: '영역 점 제거',
+      icon: 'crosshair2',
+      hotkey: 'x',
+      onmouseup: (event) => {
+        if (event.button !== 0) return
+        const selectedArea = getSelectedArea()
+        if (!selectedArea) return
+        sendMessage('SNAP')
+        sendMessage(`AREARESETP:${selectedArea.id}`)
+      }
+    },
   ]
 
   return tools
@@ -1310,75 +1338,101 @@ export function createCanvasController(options) {
       }
     }
 
-    const gridSize = unit * camera.zoom
-    ctx.globalAlpha = 1
     if (gridOn) {
-    ctx.strokeStyle = '#ccc'
-    ctx.lineWidth = 1
-    ctx.font = '10px Arial'
-    ctx.fillStyle = 'black'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    const startX = camera.toScreenX(0) % gridSize
-    const startY = camera.toScreenY(0) % gridSize
-    for (let x = startX; x < canvas.width; x += gridSize) {
-    ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, canvas.height)
-    ctx.stroke()
-      let label = Math.round(camera.toWorldX(x))
-      if (label > 0) {
-        label = `${label}E`
-      } else if (label < 0) {
-        label = `${-label}W`
-      }
-      ctx.fillText(label, x + 2, 2)
-    }
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'middle'
-    for (let y = startY; y < canvas.height; y += gridSize) {
-    ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(canvas.width, y)
-    ctx.stroke()
-      let label = Math.round(camera.toWorldY(y))
-      if (label > 0) {
-        label = `${label}S`
-      } else if (label < 0) {
-        label = `${-label}N`
-      }
-      ctx.fillText(label, canvas.width - 2, y)
-    }
-    }
-
-    // 카메라 줌 레벨 따라서 축척 그리기
-    const repeats = Math.ceil(300 / (unit * camera.zoom))
-
-    const scaleBarLength = unit * camera.zoom
-    const padding = 10
-    const yPos = canvas.height - padding
-    ctx.strokeStyle = 'white'
-    ctx.lineWidth = 3
-    ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
-    ctx.strokeStyle = 'black'
-    ctx.lineWidth = 1
-    ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
-    const unitMeters = worldToMeters(unit)
-    for (let i = 0; i < repeats; i++) {
-      const xPos = padding + i * scaleBarLength
-      ctx.fillStyle = i % 2 === 0 ? 'white' : 'black'
-      ctx.fillRect(xPos, yPos, scaleBarLength, 5)
-
+      const gridSize = unit * camera.zoom
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = '#ccc'
+      ctx.lineWidth = 1
       ctx.font = '10px Arial'
-      ctx.textAlign = 'right'
-      ctx.textBaseline = 'bottom'
-      const segmentMeters = (i + 1) * unitMeters
-      const label = formatDistanceFromMeters(segmentMeters)
-      const textWidth = ctx.measureText(label).width
-      ctx.fillStyle = 'white'
-      ctx.fillRect(xPos + scaleBarLength - textWidth - 2, yPos - 14, textWidth + 4, 12)
       ctx.fillStyle = 'black'
-      ctx.fillText(label, xPos + scaleBarLength, yPos - 2)
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      const startX = camera.toScreenX(0) % gridSize
+      const startY = camera.toScreenY(0) % gridSize
+      for (let x = startX; x < canvas.width; x += gridSize) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, canvas.height)
+        ctx.stroke()
+        let label = Math.round(camera.toWorldX(x))
+        if (label > 0) {
+          label = `${label}E`
+        } else if (label < 0) {
+          label = `${-label}W`
+        }
+        ctx.fillText(label, x + 2, 2)
+      }
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'middle'
+      for (let y = startY; y < canvas.height; y += gridSize) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(canvas.width, y)
+        ctx.stroke()
+        let label = Math.round(camera.toWorldY(y))
+        if (label > 0) {
+          label = `${label}S`
+        } else if (label < 0) {
+          label = `${-label}N`
+        }
+        ctx.fillText(label, canvas.width - 2, y)
+      }
+
+      // 카메라 줌 레벨 따라서 축척 그리기
+      const repeats = Math.ceil(300 / (unit * camera.zoom))
+
+      const scaleBarLength = unit * camera.zoom
+      const padding = 10
+      const yPos = canvas.height - padding
+      ctx.strokeStyle = 'white'
+      ctx.lineWidth = 3
+      ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
+      ctx.strokeStyle = 'black'
+      ctx.lineWidth = 1
+      ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
+      const unitMeters = worldToMeters(unit)
+      for (let i = 0; i < repeats; i++) {
+        const xPos = padding + i * scaleBarLength
+        ctx.fillStyle = i % 2 === 0 ? 'white' : 'black'
+        ctx.fillRect(xPos, yPos, scaleBarLength, 5)
+
+        ctx.font = '10px Arial'
+        ctx.textAlign = 'right'
+        ctx.textBaseline = 'bottom'
+        const segmentMeters = (i + 1) * unitMeters
+        const label = formatDistanceFromMeters(segmentMeters)
+        const textWidth = ctx.measureText(label).width
+        ctx.fillStyle = 'white'
+        ctx.fillRect(xPos + scaleBarLength - textWidth - 2, yPos - 14, textWidth + 4, 12)
+        ctx.fillStyle = 'black'
+        ctx.fillText(label, xPos + scaleBarLength, yPos - 2)
+      }
+    }
+
+    // 이름 렌더링
+    if (map) {
+      const renderAreaNames = (layer) => {
+        layer.areas.forEach((area) => {
+          if (!area.name || area.name.trim() === '') return
+          if (!area.areaPoint) return
+          const x = camera.toScreenX(area.areaPoint[0])
+          const y = camera.toScreenY(area.areaPoint[1])
+          if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) return
+          ctx.font = '14px Pretendard'
+          ctx.fillStyle = 'white'
+          ctx.strokeStyle = 'white'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.lineWidth = 4
+          ctx.strokeText(area.name, x, y)
+          ctx.fillStyle = 'black'
+          ctx.fillText(area.name, x, y)
+        })
+        if (layer.children) {
+          layer.children.forEach(child => renderAreaNames(child))
+        }
+      }
+      renderAreaNames(map.layer)
     }
 
     // 도구
@@ -1393,219 +1447,219 @@ export function createCanvasController(options) {
       const screenX = camera.toScreenX(cursor.x)
       const screenY = camera.toScreenY(cursor.y)
       const color = /.*#([0-9a-fA-F]{6})/.exec(id) ? `#${/.*#([0-9a-fA-F]{6})/.exec(id)[1]}` : 'red'
-      ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.moveTo(screenX, screenY)
-      ctx.lineTo(screenX + 10, screenY + 4)
-      ctx.lineTo(screenX + 4, screenY + 10)
-      ctx.lineTo(screenX, screenY + 6)
-      ctx.lineTo(screenX - 4, screenY + 10)
-      ctx.lineTo(screenX - 10, screenY + 4)
-      ctx.closePath()
-      ctx.fill()
-      ctx.fillStyle = 'black'
-      ctx.fillText(id, screenX + 8, screenY - 8)
-    }
-  }
-
-  function withinCanvas(event) {
-    if (!canvas) return false
-    const rect = canvas.getBoundingClientRect()
-    return (
-      event.clientX >= rect.left &&
-      event.clientX <= rect.right &&
-      event.clientY >= rect.top &&
-      event.clientY <= rect.bottom
-    )
-  }
-
-  function handleWheel(event) {
-    if (!withinCanvas(event)) return
-    if (event.altKey) {
-      const rect = canvas?.getBoundingClientRect()
-      if (!rect) return
-      const mouseX = event.clientX - rect.left
-      const mouseY = event.clientY - rect.top
-      const worldX = camera.toWorldX(mouseX)
-      const worldY = camera.toWorldY(mouseY)
-      camera.x = worldX
-      camera.y = worldY
-      camera.setZoom(camera.zoom * Math.exp(-event.deltaY * 0.001))
-      const newWorldX = camera.toWorldX(mouseX)
-      const newWorldY = camera.toWorldY(mouseY)
-      camera.x += worldX - newWorldX
-      camera.y += worldY - newWorldY
-    } else if (event.shiftKey) {
-      camera.x += event.deltaY / camera.zoom
-    } else {
-      camera.x += event.deltaX / camera.zoom
-      camera.y += event.deltaY / camera.zoom
-    }
-    const activeTool = getCurrentTool?.()
-    if (activeTool && activeTool.onwheel) {
-      activeTool.onwheel(event)
-    }
-    updateCanvas()
-  }
-
-  function mouseMoveHandler(event) {
-    if (!withinCanvas(event)) return
-
-    if (panState.active || spaceKeyPressed) {
-      const deltaX = (event.clientX - panState.startX) / camera.zoom
-      const deltaY = (event.clientY - panState.startY) / camera.zoom
-      camera.x = panState.initialCameraX - deltaX
-      camera.y = panState.initialCameraY - deltaY
-      updateCanvas()
-    }
-
-    const rect = canvas?.getBoundingClientRect()
-    if (!rect) return
-    const worldX = Math.trunc(camera.toWorldX(event.clientX - rect.left))
-    const worldY = Math.trunc(camera.toWorldY(event.clientY - rect.top))
-
-    if (isConnected?.()) {
-      sendCursorMessage(worldX, worldY)
-    }
-
-    onMousePositionChange({ x: worldX, y: worldY })
-
-    const activeTool = getCurrentTool?.()
-    if (activeTool && activeTool.onmousemove) {
-      activeTool.onmousemove(event)
-    }
-  }
-
-  function mouseButtonUpHandler(event) {
-    if (!withinCanvas(event)) return
-
-    if (event.button === 1) {
-      panState.active = false
-    }
-
-    const activeTool = getCurrentTool?.()
-    if (activeTool && activeTool.onmouseup) {
-      activeTool.onmouseup(event)
-    }
-  }
-
-  function mouseButtonDownHandler(event) {
-    if (!withinCanvas(event)) return
-
-    if (event.button === 1) {
-      event.preventDefault()
-      panState.active = true
-      panState.startX = event.clientX
-      panState.startY = event.clientY
-      panState.initialCameraX = camera.x
-      panState.initialCameraY = camera.y
-    }
-
-    const activeTool = getCurrentTool?.()
-    if (activeTool && activeTool.onmousedown) {
-      activeTool.onmousedown(event)
-    }
-  }
-
-  function keyDownHandler(event) {
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
-      return
-    }
-
-    if (event.key === 'z' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault()
-      ws.send('UNDO')
-      return
-    }
-
-    if (event.key === ' ') {
-      if (!spaceKeyPressed) {
-        spaceKeyPressed = true
-        document.body.style.cursor = 'grab'
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.moveTo(screenX, screenY)
+        ctx.lineTo(screenX + 10, screenY + 4)
+        ctx.lineTo(screenX + 4, screenY + 10)
+        ctx.lineTo(screenX, screenY + 6)
+        ctx.lineTo(screenX - 4, screenY + 10)
+        ctx.lineTo(screenX - 10, screenY + 4)
+        ctx.closePath()
+        ctx.fill()
+        ctx.fillStyle = 'black'
+        ctx.fillText(id, screenX + 8, screenY - 8)
       }
     }
 
-    const activeTool = getCurrentTool?.()
-    if (activeTool && activeTool.onkeydown) {
-      activeTool.onkeydown(event)
-    }
-  }
-
-  function keyUpHandler(event) {
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
-      return
-    }
-
-    if (event.key === ' ') {
-      spaceKeyPressed = false
-      document.body.style.cursor = 'default'
-      panState.active = false
+    function withinCanvas(event) {
+      if (!canvas) return false
+      const rect = canvas.getBoundingClientRect()
+      return (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      )
     }
 
-    const activeTool = getCurrentTool?.()
-    if (activeTool && activeTool.onkeyup) {
-      activeTool.onkeyup(event)
+    function handleWheel(event) {
+      if (!withinCanvas(event)) return
+      if (event.altKey) {
+        const rect = canvas?.getBoundingClientRect()
+        if (!rect) return
+        const mouseX = event.clientX - rect.left
+        const mouseY = event.clientY - rect.top
+        const worldX = camera.toWorldX(mouseX)
+        const worldY = camera.toWorldY(mouseY)
+        camera.x = worldX
+        camera.y = worldY
+        camera.setZoom(camera.zoom * Math.exp(-event.deltaY * 0.001))
+        const newWorldX = camera.toWorldX(mouseX)
+        const newWorldY = camera.toWorldY(mouseY)
+        camera.x += worldX - newWorldX
+        camera.y += worldY - newWorldY
+      } else if (event.shiftKey) {
+        camera.x += event.deltaY / camera.zoom
+      } else {
+        camera.x += event.deltaX / camera.zoom
+        camera.y += event.deltaY / camera.zoom
+      }
+      const activeTool = getCurrentTool?.()
+      if (activeTool && activeTool.onwheel) {
+        activeTool.onwheel(event)
+      }
+      updateCanvas()
     }
-  }
 
-  function setCanvasRef(element) {
-    canvas = element
-    if (canvas) {
+    function mouseMoveHandler(event) {
+      if (!withinCanvas(event)) return
+
+      if (panState.active || spaceKeyPressed) {
+        const deltaX = (event.clientX - panState.startX) / camera.zoom
+        const deltaY = (event.clientY - panState.startY) / camera.zoom
+        camera.x = panState.initialCameraX - deltaX
+        camera.y = panState.initialCameraY - deltaY
+        updateCanvas()
+      }
+
+      const rect = canvas?.getBoundingClientRect()
+      if (!rect) return
+      const worldX = Math.trunc(camera.toWorldX(event.clientX - rect.left))
+      const worldY = Math.trunc(camera.toWorldY(event.clientY - rect.top))
+
+      if (isConnected?.()) {
+        sendCursorMessage(worldX, worldY)
+      }
+
+      onMousePositionChange({ x: worldX, y: worldY })
+
+      const activeTool = getCurrentTool?.()
+      if (activeTool && activeTool.onmousemove) {
+        activeTool.onmousemove(event)
+      }
+    }
+
+    function mouseButtonUpHandler(event) {
+      if (!withinCanvas(event)) return
+
+      if (event.button === 1) {
+        panState.active = false
+      }
+
+      const activeTool = getCurrentTool?.()
+      if (activeTool && activeTool.onmouseup) {
+        activeTool.onmouseup(event)
+      }
+    }
+
+    function mouseButtonDownHandler(event) {
+      if (!withinCanvas(event)) return
+
+      if (event.button === 1) {
+        event.preventDefault()
+        panState.active = true
+        panState.startX = event.clientX
+        panState.startY = event.clientY
+        panState.initialCameraX = camera.x
+        panState.initialCameraY = camera.y
+      }
+
+      const activeTool = getCurrentTool?.()
+      if (activeTool && activeTool.onmousedown) {
+        activeTool.onmousedown(event)
+      }
+    }
+
+    function keyDownHandler(event) {
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
+        return
+      }
+
+      if (event.key === 'z' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault()
+        ws.send('UNDO')
+        return
+      }
+
+      if (event.key === ' ') {
+        if (!spaceKeyPressed) {
+          spaceKeyPressed = true
+          document.body.style.cursor = 'grab'
+        }
+      }
+
+      const activeTool = getCurrentTool?.()
+      if (activeTool && activeTool.onkeydown) {
+        activeTool.onkeydown(event)
+      }
+    }
+
+    function keyUpHandler(event) {
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable) {
+        return
+      }
+
+      if (event.key === ' ') {
+        spaceKeyPressed = false
+        document.body.style.cursor = 'default'
+        panState.active = false
+      }
+
+      const activeTool = getCurrentTool?.()
+      if (activeTool && activeTool.onkeyup) {
+        activeTool.onkeyup(event)
+      }
+    }
+
+    function setCanvasRef(element) {
+      canvas = element
+      if (canvas) {
+        ctx = canvas.getContext('2d')
+      }
+    }
+
+    function setWorkspaceRef(element) {
+      workspace = element
+    }
+
+    function initialize() {
+      if (!canvas) return
       ctx = canvas.getContext('2d')
+      resizeCanvas()
     }
-  }
 
-  function setWorkspaceRef(element) {
-    workspace = element
-  }
+    function installGlobalListeners() {
+      const boundResize = () => resizeCanvas()
+      const boundWheel = (event) => handleWheel(event)
+      const boundMouseDown = (event) => mouseButtonDownHandler(event)
+      const boundMouseMove = (event) => mouseMoveHandler(event)
+      const boundMouseUp = (event) => mouseButtonUpHandler(event)
+      const boundKeyDown = (event) => keyDownHandler(event)
+      const boundKeyUp = (event) => keyUpHandler(event)
 
-  function initialize() {
-    if (!canvas) return
-    ctx = canvas.getContext('2d')
-    resizeCanvas()
-  }
-
-  function installGlobalListeners() {
-    const boundResize = () => resizeCanvas()
-    const boundWheel = (event) => handleWheel(event)
-    const boundMouseDown = (event) => mouseButtonDownHandler(event)
-    const boundMouseMove = (event) => mouseMoveHandler(event)
-    const boundMouseUp = (event) => mouseButtonUpHandler(event)
-    const boundKeyDown = (event) => keyDownHandler(event)
-    const boundKeyUp = (event) => keyUpHandler(event)
-
-    window.addEventListener('resize', boundResize)
-    window.addEventListener('wheel', boundWheel, { passive: true })
-    window.addEventListener('mousedown', boundMouseDown)
-    window.addEventListener('mousemove', boundMouseMove)
-    window.addEventListener('mouseup', boundMouseUp)
-    window.addEventListener('keydown', boundKeyDown)
-    window.addEventListener('keyup', boundKeyUp)
-
-    return () => {
-      window.removeEventListener('resize', boundResize)
-      window.removeEventListener('wheel', boundWheel)
-      window.removeEventListener('mousedown', boundMouseDown)
-      window.removeEventListener('mousemove', boundMouseMove)
-      window.removeEventListener('mouseup', boundMouseUp)
+      window.addEventListener('resize', boundResize)
+      window.addEventListener('wheel', boundWheel, { passive: true })
+      window.addEventListener('mousedown', boundMouseDown)
+      window.addEventListener('mousemove', boundMouseMove)
+      window.addEventListener('mouseup', boundMouseUp)
       window.addEventListener('keydown', boundKeyDown)
       window.addEventListener('keyup', boundKeyUp)
+
+      return () => {
+        window.removeEventListener('resize', boundResize)
+        window.removeEventListener('wheel', boundWheel)
+        window.removeEventListener('mousedown', boundMouseDown)
+        window.removeEventListener('mousemove', boundMouseMove)
+        window.removeEventListener('mouseup', boundMouseUp)
+        window.addEventListener('keydown', boundKeyDown)
+        window.addEventListener('keyup', boundKeyUp)
+      }
+    }
+
+    return {
+      camera,
+      tools,
+      setCanvasRef,
+      setWorkspaceRef,
+      initialize,
+      resizeCanvas,
+      updateCanvas,
+      handleWheel,
+      mouseMoveHandler,
+      mouseButtonDownHandler,
+      mouseButtonUpHandler,
+      installGlobalListeners,
+      toggleGrid
     }
   }
-
-  return {
-    camera,
-    tools,
-    setCanvasRef,
-    setWorkspaceRef,
-    initialize,
-    resizeCanvas,
-    updateCanvas,
-    handleWheel,
-    mouseMoveHandler,
-    mouseButtonDownHandler,
-    mouseButtonUpHandler,
-    installGlobalListeners,
-    toggleGrid
-  }
-}

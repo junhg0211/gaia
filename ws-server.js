@@ -964,6 +964,66 @@ async function handleMessage(ws, message) {
     return;
   }
 
+  const AREAPOINT_RE = /^APNT:(\d+):([0-9\-\.]+),([0-9\-\.]+)$/;
+  const areaPointMatch = message.match(AREAPOINT_RE);
+  if (areaPointMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const areaId = parseInt(areaPointMatch[1]);
+    const x = parseFloat(areaPointMatch[2]);
+    const y = parseFloat(areaPointMatch[3]);
+
+    if (areaId === 0) {
+      ws.send('ERR Cannot modify root area');
+      return;
+    }
+
+    const area = map.findArea(areaId);
+    if (!area) {
+      ws.send('ERR Invalid area ID');
+      return;
+    }
+
+    area.areaPoint = [x, y];
+    ws.send(`OK`);
+    const broadcastMessage = `APNT:${areaId}:${x},${y}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
+  const AREARESETPOINT_RE = /^AREARESETP:(\d+)$/;
+  const areaResetPointMatch = message.match(AREARESETPOINT_RE);
+  if (areaResetPointMatch) {
+    if (![...clients].some(([clientWs]) => clientWs === ws)) {
+      ws.send('ERR Not logged in');
+      return;
+    }
+    const areaId = parseInt(areaResetPointMatch[1]);
+
+    if (areaId === 0) {
+      ws.send('ERR Cannot modify root area');
+      return;
+    }
+
+    const area = map.findArea(areaId);
+    if (!area) {
+      ws.send('ERR Invalid area ID');
+      return;
+    }
+
+    area.areaPoint = null;
+    ws.send(`OK`);
+    const broadcastMessage = `AREARESETP:${areaId}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+    return;
+  }
+
   // If no command matched
   ws.send(`ERR:Unknown command: ${message}`);
 }

@@ -695,6 +695,7 @@ class Area {
     this.name = name;
     this.area = 0;
     this.clipAreas = [];
+    this.areaPoint = null;
 
     if (this.id === undefined || this.id === null) {
       this.id = Area.getNextId();
@@ -1191,6 +1192,7 @@ function serializeArea(area) {
     color: area.color,
     name: area.name,
     clipAreas: area.clipAreas,
+    areaPoint: area.areaPoint,
   };
 }
 
@@ -1377,6 +1379,12 @@ function deserializeLayerCompact(data, parent = null) {
 function deserializeArea(data, parent) {
   const area = new Area(parseInt(data.id), data.color, parent, data.name);
   area.clipAreas = Array.isArray(data.clipAreas) ? data.clipAreas.map(id => parseInt(id)) : [];
+  area.areaPoint = Array.isArray(data.areaPoint) && data.areaPoint.length === 2
+    ? [Number(data.areaPoint[0]), Number(data.areaPoint[1])]
+    : null;
+  if (area.id > areaHighestId) {
+    areaHighestId = area.id;
+  }
   return area;
 }
 
