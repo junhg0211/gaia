@@ -119,8 +119,6 @@ function adoptMapFromWorker(nextMap) {
   map = deserializeMapCompact(nextMap);
 }
 async function handleMessage(ws, message) {
-  console.log(`📩 Received: ${message}`);
-
   const ECHO_RE = /^ECHO:(.*)$/;
   const echoMatch = message.match(ECHO_RE);
   if (echoMatch) {
@@ -322,7 +320,12 @@ async function handleMessage(ws, message) {
       ws.send('ERR Invalid layer ID');
       return;
     }
-    const lineResult = await enqueueQuadtreeTask('line', {
+    const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}:${precision}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+
+    enqueueQuadtreeTask('line', {
       map: serializeMapCompact(map),
       layerId,
       x1,
@@ -332,30 +335,28 @@ async function handleMessage(ws, message) {
       color,
       brushSize,
       precision,
-    }).catch(error => {
-      console.error('Failed to process line operation', error);
-      return { status: 'error', message: 'Worker failure while processing line' };
-    });
+    })
+      .then(lineResult => {
+        if (!lineResult || lineResult.status !== 'ok') {
+          const errorMessage = lineResult?.message ?? 'Unable to process line command';
+          ws.send(`ERR ${errorMessage}`);
+          return;
+        }
 
-    if (!lineResult || lineResult.status !== 'ok') {
-      const errorMessage = lineResult?.message ?? 'Unable to process line command';
-      ws.send(`ERR ${errorMessage}`);
-      return;
-    }
+        try {
+          adoptMapFromWorker(lineResult.map);
+        } catch (error) {
+          console.error('Failed to adopt map after line operation', error);
+          ws.send('ERR Failed to update map after line operation');
+          return;
+        }
 
-    try {
-      adoptMapFromWorker(lineResult.map);
-    } catch (error) {
-      console.error('Failed to adopt map after line operation', error);
-      ws.send('ERR Failed to update map after line operation');
-      return;
-    }
-
-    const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}:${precision}`;
-    for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
-    }
-    ws.send('OK');
+        ws.send('OK');
+      })
+      .catch(error => {
+        console.error('Failed to process line operation', error);
+        ws.send('ERR Worker failure while processing line');
+      });
 
     return;
   }
@@ -653,7 +654,14 @@ async function handleMessage(ws, message) {
       ws.send('ERR Invalid layer ID');
       return;
     }
-    const rectResult = await enqueueQuadtreeTask('rect', {
+    if (boardcasting) {
+      const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
+      for (const [clientWs] of clients) {
+        clientWs.send(broadcastMessage);
+      }
+    }
+
+    enqueueQuadtreeTask('rect', {
       map: serializeMapCompact(map),
       layerId,
       x1,
@@ -662,32 +670,30 @@ async function handleMessage(ws, message) {
       y2,
       color,
       precision,
-    }).catch(error => {
-      console.error('Failed to process rect operation', error);
-      return { status: 'error', message: 'Worker failure while processing rect' };
-    });
+    })
+      .then(rectResult => {
+        if (!rectResult || rectResult.status !== 'ok') {
+          const errorMessage = rectResult?.message ?? 'Unable to process rect command';
+          ws.send(`ERR ${errorMessage}`);
+          return;
+        }
 
-    if (!rectResult || rectResult.status !== 'ok') {
-      const errorMessage = rectResult?.message ?? 'Unable to process rect command';
-      ws.send(`ERR ${errorMessage}`);
-      return;
-    }
+        try {
+          adoptMapFromWorker(rectResult.map);
+        } catch (error) {
+          console.error('Failed to adopt map after rect operation', error);
+          ws.send('ERR Failed to update map after rect operation');
+          return;
+        }
 
-    try {
-      adoptMapFromWorker(rectResult.map);
-    } catch (error) {
-      console.error('Failed to adopt map after rect operation', error);
-      ws.send('ERR Failed to update map after rect operation');
-      return;
-    }
-
-    if (boardcasting) {
-      const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
-      for (const [clientWs] of clients) {
-        clientWs.send(broadcastMessage);
-      }
-      ws.send('OK');
-    }
+        if (boardcasting) {
+          ws.send('OK');
+        }
+      })
+      .catch(error => {
+        console.error('Failed to process rect operation', error);
+        ws.send('ERR Worker failure while processing rect');
+      });
 
     return;
   }
@@ -749,7 +755,12 @@ async function handleMessage(ws, message) {
     }
 
     const targetLayerId = layer.id;
-    const fillResult = await enqueueQuadtreeTask('fill', {
+    const broadcastMessage = `FILL:${targetLayerId}:${x},${y}:${color}:${precision}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+
+    enqueueQuadtreeTask('fill', {
       map: serializeMapCompact(map),
       layerId: targetLayerId,
       x,
@@ -757,75 +768,73 @@ async function handleMessage(ws, message) {
       color,
       precision,
       options: { maxCells: 200000 },
-    }).catch(error => {
-      console.error('Failed to process fill operation', error);
-      return { status: 'error', message: 'Worker failure while processing fill' };
-    });
+    })
+      .then(fillResult => {
+        if (!fillResult || fillResult.status !== 'ok') {
+          const reason = fillResult?.reason;
+          if (reason === 'open_space') {
+            state.openFillAttempts = (state.openFillAttempts || 0) + 1;
+            state.lastOpenAttempt = now;
+            if (state.openFillAttempts >= 3) {
+              state.cooldownUntil = now + 3000;
+              state.openFillAttempts = 0;
+            }
+            if (setClientState) setClientState(ws, state);
+            ws.send('ERR Paint bucket works only inside existing regions');
+            return;
+          }
 
-    if (!fillResult || fillResult.status !== 'ok') {
-      const reason = fillResult?.reason;
-      if (reason === 'open_space') {
-        state.openFillAttempts = (state.openFillAttempts || 0) + 1;
-        state.lastOpenAttempt = now;
-        if (state.openFillAttempts >= 3) {
-          state.cooldownUntil = now + 3000;
-          state.openFillAttempts = 0;
+          if (reason === 'limit_exceeded') {
+            ws.send('ERR Fill area too large; zoom in or refine the region');
+            return;
+          }
+
+          if (reason === 'invalid_precision') {
+            ws.send('ERR Invalid precision for fill operation');
+            return;
+          }
+
+          if (reason === 'out_of_bounds') {
+            ws.send('ERR Fill point outside of layer bounds');
+            return;
+          }
+
+          if (reason === 'no_target') {
+            ws.send('ERR Nothing to fill at target location');
+            return;
+          }
+
+          if (reason === 'already_filled') {
+            state.openFillAttempts = 0;
+            state.cooldownUntil = 0;
+            if (setClientState) setClientState(ws, state);
+            ws.send('OK Fill skipped (already target color)');
+            return;
+          }
+
+          const errorMessage = fillResult?.message ?? 'Unable to process fill command';
+          ws.send(`ERR ${errorMessage}`);
+          return;
         }
-        if (setClientState) setClientState(ws, state);
-        ws.send('ERR Paint bucket works only inside existing regions');
-        return;
-      }
 
-      if (reason === 'limit_exceeded') {
-        ws.send('ERR Fill area too large; zoom in or refine the region');
-        return;
-      }
+        try {
+          adoptMapFromWorker(fillResult.map);
+        } catch (error) {
+          console.error('Failed to adopt map after fill operation', error);
+          ws.send('ERR Failed to update map after fill operation');
+          return;
+        }
 
-      if (reason === 'invalid_precision') {
-        ws.send('ERR Invalid precision for fill operation');
-        return;
-      }
-
-      if (reason === 'out_of_bounds') {
-        ws.send('ERR Fill point outside of layer bounds');
-        return;
-      }
-
-      if (reason === 'no_target') {
-        ws.send('ERR Nothing to fill at target location');
-        return;
-      }
-
-      if (reason === 'already_filled') {
         state.openFillAttempts = 0;
         state.cooldownUntil = 0;
         if (setClientState) setClientState(ws, state);
-        ws.send('OK Fill skipped (already target color)');
-        return;
-      }
 
-      const errorMessage = fillResult?.message ?? 'Unable to process fill command';
-      ws.send(`ERR ${errorMessage}`);
-      return;
-    }
-
-    try {
-      adoptMapFromWorker(fillResult.map);
-    } catch (error) {
-      console.error('Failed to adopt map after fill operation', error);
-      ws.send('ERR Failed to update map after fill operation');
-      return;
-    }
-
-    state.openFillAttempts = 0;
-    state.cooldownUntil = 0;
-    if (setClientState) setClientState(ws, state);
-
-    const broadcastMessage = `FILL:${targetLayerId}:${x},${y}:${color}:${precision}`;
-    for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
-    }
-    ws.send('OK');
+        ws.send('OK');
+      })
+      .catch(error => {
+        console.error('Failed to process fill operation', error);
+        ws.send('ERR Worker failure while processing fill');
+      });
     return;
   }
 
@@ -855,36 +864,39 @@ async function handleMessage(ws, message) {
       ws.send('ERR Invalid layer ID');
       return;
     }
-    const polyResult = await enqueueQuadtreeTask('poly', {
+    const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;
+    for (const [clientWs] of clients) {
+      clientWs.send(broadcastMessage);
+    }
+
+    enqueueQuadtreeTask('poly', {
       map: serializeMapCompact(map),
       layerId,
       points: newPoints,
       color,
       precision,
-    }).catch(error => {
-      console.error('Failed to process polygon operation', error);
-      return { status: 'error', message: 'Worker failure while processing polygon' };
-    });
+    })
+      .then(polyResult => {
+        if (!polyResult || polyResult.status !== 'ok') {
+          const errorMessage = polyResult?.message ?? 'Unable to process polygon command';
+          ws.send(`ERR ${errorMessage}`);
+          return;
+        }
 
-    if (!polyResult || polyResult.status !== 'ok') {
-      const errorMessage = polyResult?.message ?? 'Unable to process polygon command';
-      ws.send(`ERR ${errorMessage}`);
-      return;
-    }
+        try {
+          adoptMapFromWorker(polyResult.map);
+        } catch (error) {
+          console.error('Failed to adopt map after polygon operation', error);
+          ws.send('ERR Failed to update map after polygon operation');
+          return;
+        }
 
-    try {
-      adoptMapFromWorker(polyResult.map);
-    } catch (error) {
-      console.error('Failed to adopt map after polygon operation', error);
-      ws.send('ERR Failed to update map after polygon operation');
-      return;
-    }
-
-    const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;
-    for (const [clientWs] of clients) {
-      clientWs.send(broadcastMessage);
-    }
-    ws.send('OK');
+        ws.send('OK');
+      })
+      .catch(error => {
+        console.error('Failed to process polygon operation', error);
+        ws.send('ERR Worker failure while processing polygon');
+      });
 
     return;
   }

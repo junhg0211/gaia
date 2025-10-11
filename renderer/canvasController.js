@@ -1,5 +1,5 @@
 import { tick } from 'svelte'
-import { Area, serializeLayerCompact } from '../dataframe.js'
+import { Area, serializeLayerCompact, buildClipContext } from '../dataframe.js'
 import { createMapRenderer } from './quadtreeRenderer.js'
 import {
   formatWorldArea,
@@ -78,6 +78,89 @@ function buildTools({
     previousY: 0,
     mouseX: 0,
     mouseY: 0,
+    pendingSegments: [],
+    processingPromise: null,
+    layerId: null,
+    areaId: null,
+    hasPendingWork: false,
+    needsAreaSync: false,
+  }
+
+  async function applyBrushSegment(segment) {
+    if (!segment) return
+    const map = typeof getMap === 'function' ? getMap() : null
+    if (!map) return
+    const layerId = Number(segment.layerId)
+    const areaId = Number(segment.areaId)
+    if (!Number.isFinite(layerId) || !Number.isFinite(areaId)) return
+    const layer = map.findLayer(layerId)
+    if (!layer) return
+    const width = Number(segment.width)
+    if (!Number.isFinite(width) || width <= 0) return
+    const x1 = Number(segment.x1)
+    const y1 = Number(segment.y1)
+    const x2 = Number(segment.x2)
+    const y2 = Number(segment.y2)
+    if ([x1, y1, x2, y2].some(value => !Number.isFinite(value))) return
+    layer.expandTo(x1, y1)
+    layer.expandTo(x2, y2)
+    const [px, py] = layer.pos ?? [0, 0]
+    const [sx, sy] = layer.size ?? [1, 1]
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+    const precision = Math.max(Number(segment.precision) || 1e-6, 1e-6)
+    const sizeForDepth = Math.max(sx, precision)
+    const depth = Math.max(0, Math.log2(sizeForDepth / precision))
+    const targetArea = map.findArea(areaId)
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
+    let succeeded = true
+    try {
+      layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipContext)
+    } catch (error) {
+      console.warn('Failed to draw brush segment locally', error)
+      succeeded = false
+    } finally {
+      try {
+        layer.cleanup()
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup layer after brush segment', cleanupError)
+      }
+    }
+    if (!succeeded) return
+    brushVars.needsAreaSync = true
+    bumpMapUpdate?.()
+    updateCanvas()
+    await tick()
+  }
+
+  async function processBrushQueue() {
+    while (brushVars.pendingSegments.length > 0) {
+      const segment = brushVars.pendingSegments.shift()
+      await applyBrushSegment(segment)
+    }
+  }
+
+  function enqueueBrushSegment(segment) {
+    brushVars.pendingSegments.push(segment)
+    brushVars.hasPendingWork = true
+    if (!brushVars.processingPromise) {
+      brushVars.processingPromise = processBrushQueue()
+        .catch(error => {
+          console.warn('Failed to process brush queue', error)
+        })
+        .finally(() => {
+          brushVars.processingPromise = null
+        })
+    }
+  }
+
+  async function flushBrushQueue() {
+    if (brushVars.processingPromise) {
+      try {
+        await brushVars.processingPromise
+      } catch (error) {
+        console.warn('Failed to flush brush queue', error)
+      }
+    }
   }
 
   const lassoVars = {
@@ -370,14 +453,28 @@ function buildTools({
       hotkey: 'b',
       vars: brushVars,
       onmousedown: (event) => {
-        if (event.button === 0) {
-          brushVars.brushing = true
-          brushVars.previousX = event.clientX
-          brushVars.previousY = event.clientY
-          brushVars.mouseX = event.clientX
-          brushVars.mouseY = event.clientY
-          sendMessage("SNAP");
-        }
+        if (event.button !== 0) return
+        const selectedArea = getSelectedArea()
+        const canvas = getCanvas()
+        if (!selectedArea || !canvas) return
+        const map = typeof getMap === 'function' ? getMap() : null
+        const canonicalArea = typeof map?.findArea === 'function'
+          ? map.findArea(selectedArea.id) ?? selectedArea
+          : selectedArea
+        const parentLayer = canonicalArea?.parent ?? selectedArea.parent
+        if (!parentLayer) return
+        brushVars.brushing = true
+        brushVars.previousX = event.clientX
+        brushVars.previousY = event.clientY
+        brushVars.mouseX = event.clientX
+        brushVars.mouseY = event.clientY
+        brushVars.pendingSegments.length = 0
+        brushVars.layerId = parentLayer.id
+        brushVars.areaId = canonicalArea.id
+        brushVars.hasPendingWork = false
+        brushVars.needsAreaSync = false
+        brushVars.processingPromise = null
+        sendMessage('SNAP')
       },
       onmousemove: (event) => {
         brushVars.mouseX = event.clientX
@@ -386,22 +483,102 @@ function buildTools({
 
         if (event.button !== 0) return
         if (!brushVars.brushing) return
-        const selectedArea = getSelectedArea()
-        const canvas = getCanvas()
-        if (!selectedArea || !canvas) return
+        if (!Number.isFinite(brushVars.layerId) || !Number.isFinite(brushVars.areaId)) return
         const start = toWorldPoint(brushVars.previousX, brushVars.previousY)
         const end = toWorldPoint(event.clientX, event.clientY)
         if (!start || !end) return
+        const dx = end.x - start.x
+        const dy = end.y - start.y
+        if (!Number.isFinite(dx) || !Number.isFinite(dy)) return
+        if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return
         const width = brushVars.width / camera.zoom
-        const precision = 1 / camera.zoom;
-        sendMessage(`LINE:${selectedArea.parent.id}:${start.x},${start.y}:${end.x},${end.y}:${selectedArea.id},${width}:${precision}`)
+        if (!Number.isFinite(width) || width <= 0) return
+        const precision = Math.max(1 / camera.zoom, 1e-6)
+        enqueueBrushSegment({
+          layerId: brushVars.layerId,
+          areaId: brushVars.areaId,
+          x1: start.x,
+          y1: start.y,
+          x2: end.x,
+          y2: end.y,
+          width,
+          precision,
+        })
         brushVars.previousX = event.clientX
         brushVars.previousY = event.clientY
         updateCanvas()
       },
-      onmouseup: (event) => {
-        if (event.button === 0) {
-          brushVars.brushing = false
+      onmouseup: async (event) => {
+        if (event.button !== 0) return
+        if (!brushVars.brushing && !brushVars.hasPendingWork) return
+        brushVars.brushing = false
+        brushVars.mouseX = event.clientX
+        brushVars.mouseY = event.clientY
+        const map = typeof getMap === 'function' ? getMap() : null
+        if (!map) {
+          brushVars.layerId = null
+          brushVars.areaId = null
+          brushVars.pendingSegments.length = 0
+          brushVars.hasPendingWork = false
+          brushVars.needsAreaSync = false
+          brushVars.processingPromise = null
+          return
+        }
+        await flushBrushQueue()
+        if (!brushVars.hasPendingWork) {
+          brushVars.layerId = null
+          brushVars.areaId = null
+          brushVars.pendingSegments.length = 0
+          brushVars.needsAreaSync = false
+          return
+        }
+        const layerId = Number(brushVars.layerId)
+        if (!Number.isFinite(layerId)) {
+          brushVars.layerId = null
+          brushVars.areaId = null
+          brushVars.pendingSegments.length = 0
+          brushVars.hasPendingWork = false
+          brushVars.needsAreaSync = false
+          brushVars.processingPromise = null
+          return
+        }
+        const layer = map.findLayer(layerId)
+        if (!layer) {
+          brushVars.layerId = null
+          brushVars.areaId = null
+          brushVars.pendingSegments.length = 0
+          brushVars.hasPendingWork = false
+          brushVars.needsAreaSync = false
+          brushVars.processingPromise = null
+          return
+        }
+        try {
+          try {
+            layer.cleanup()
+          } catch (cleanupError) {
+            console.warn('Failed to cleanup layer before sending brush update', cleanupError)
+          }
+          if (brushVars.needsAreaSync) {
+            try {
+              layer.calculateAreas()
+            } catch (areaError) {
+              console.warn('Failed to recalculate areas after brush stroke', areaError)
+            }
+            brushVars.needsAreaSync = false
+          }
+          bumpMapUpdate?.()
+          updateCanvas()
+          const payload = {
+            parentId: layer.parent ? layer.parent.id : null,
+            layer: serializeLayerCompact(layer),
+          }
+          sendMessage(`SET_LAYER:${layer.id}:${JSON.stringify(payload)}`)
+        } finally {
+          brushVars.pendingSegments.length = 0
+          brushVars.layerId = null
+          brushVars.areaId = null
+          brushVars.hasPendingWork = false
+          brushVars.processingPromise = null
         }
       },
       onkeydown: (event) => {
