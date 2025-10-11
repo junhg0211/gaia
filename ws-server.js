@@ -1,9 +1,10 @@
 // index.js
 import { WebSocketServer } from 'ws';
+import { Worker } from 'node:worker_threads';
 import { loadMapFromFile, saveMapToFile } from './dataframe-fs.js';
 import fs from 'fs';
 
-import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, deserializeMapCompact, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact, buildClipContext } from './dataframe.js';
+import { Map as GaiaMap, Layer, Area, Quadtree, serializeMap, deserializeMapCompact, serializeMapCompact, serializeLayerCompact, deserializeLayerCompact } from './dataframe.js';
 
 const PORT = 48829;
 const ZERO_AREA_THRESHOLD = 1e-9;
@@ -38,6 +39,9 @@ const heartbeatInterval = setInterval(() => {
 
 wss.on('close', () => {
   clearInterval(heartbeatInterval);
+  quadtreeWorker.terminate().catch(error => {
+    console.warn('Failed to terminate quadtree worker', error);
+  });
 });
 
 let map;
@@ -51,6 +55,69 @@ const clients = new Set();
 const compactClients = new Set();
 const clientState = new Map();
 const snapshots = [];
+
+const quadtreeWorker = new Worker(new URL('./workers/quadtreeWorker.js', import.meta.url), {
+  type: 'module',
+});
+
+let nextWorkerRequestId = 1;
+const pendingQuadtreeRequests = new Map();
+let quadtreeTaskChain = Promise.resolve();
+
+quadtreeWorker.on('message', message => {
+  const { id, ...result } = message;
+  const pending = pendingQuadtreeRequests.get(id);
+  if (!pending) {
+    console.warn('Received worker response with unknown id', id);
+    return;
+  }
+  pendingQuadtreeRequests.delete(id);
+  pending.resolve(result);
+});
+
+quadtreeWorker.on('error', error => {
+  console.error('Quadtree worker error', error);
+  for (const pending of pendingQuadtreeRequests.values()) {
+    pending.reject(error);
+  }
+  pendingQuadtreeRequests.clear();
+});
+
+quadtreeWorker.on('exit', code => {
+  if (code === 0) return;
+  const error = new Error(`Quadtree worker exited with code ${code}`);
+  console.error(error);
+  for (const pending of pendingQuadtreeRequests.values()) {
+    pending.reject(error);
+  }
+  pendingQuadtreeRequests.clear();
+});
+
+function runQuadtreeTask(type, payload) {
+  return new Promise((resolve, reject) => {
+    const id = nextWorkerRequestId++;
+    pendingQuadtreeRequests.set(id, { resolve, reject });
+    try {
+      quadtreeWorker.postMessage({ id, type, payload });
+    } catch (error) {
+      pendingQuadtreeRequests.delete(id);
+      reject(error);
+    }
+  });
+}
+
+function enqueueQuadtreeTask(type, payload) {
+  const task = quadtreeTaskChain.then(() => runQuadtreeTask(type, payload));
+  quadtreeTaskChain = task.catch(() => {});
+  return task;
+}
+
+function adoptMapFromWorker(nextMap) {
+  if (!nextMap) {
+    throw new Error('Worker returned empty map payload');
+  }
+  map = deserializeMapCompact(nextMap);
+}
 async function handleMessage(ws, message) {
   console.log(`📩 Received: ${message}`);
 
@@ -255,28 +322,34 @@ async function handleMessage(ws, message) {
       ws.send('ERR Invalid layer ID');
       return;
     }
-
-    layer.expandTo(x1, y1);
-    layer.expandTo(x2, y2);
-    const [px, py] = layer.pos ?? [0, 0];
-    const [sx, sy] = layer.size ?? [1, 1];
-    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
-
-    const depth = Math.log2(layer.size[0] / precision);
-    const targetArea = map.findArea(color);
-    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? []);
-    layer.quadtree.drawLine(
+    const lineResult = await enqueueQuadtreeTask('line', {
+      map: serializeMapCompact(map),
+      layerId,
       x1,
       y1,
       x2,
       y2,
-      brushSize,
       color,
-      depth,
-      bounds,
-      clipContext
-    );
-    layer.cleanup();
+      brushSize,
+      precision,
+    }).catch(error => {
+      console.error('Failed to process line operation', error);
+      return { status: 'error', message: 'Worker failure while processing line' };
+    });
+
+    if (!lineResult || lineResult.status !== 'ok') {
+      const errorMessage = lineResult?.message ?? 'Unable to process line command';
+      ws.send(`ERR ${errorMessage}`);
+      return;
+    }
+
+    try {
+      adoptMapFromWorker(lineResult.map);
+    } catch (error) {
+      console.error('Failed to adopt map after line operation', error);
+      ws.send('ERR Failed to update map after line operation');
+      return;
+    }
 
     const broadcastMessage = `LINE:${layerId}:${x1},${y1}:${x2},${y2}:${color},${brushSize}:${precision}`;
     for (const [clientWs] of clients) {
@@ -580,18 +653,33 @@ async function handleMessage(ws, message) {
       ws.send('ERR Invalid layer ID');
       return;
     }
+    const rectResult = await enqueueQuadtreeTask('rect', {
+      map: serializeMapCompact(map),
+      layerId,
+      x1,
+      y1,
+      x2,
+      y2,
+      color,
+      precision,
+    }).catch(error => {
+      console.error('Failed to process rect operation', error);
+      return { status: 'error', message: 'Worker failure while processing rect' };
+    });
 
-    layer.expandTo(x1, y1);
-    layer.expandTo(x2, y2);
-    const [px, py] = layer.pos ?? [0, 0];
-    const [sx, sy] = layer.size ?? [1, 1];
-    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
+    if (!rectResult || rectResult.status !== 'ok') {
+      const errorMessage = rectResult?.message ?? 'Unable to process rect command';
+      ws.send(`ERR ${errorMessage}`);
+      return;
+    }
 
-    const depth = Math.log2(layer.size[0] / precision);
-    const targetArea = map.findArea(color);
-    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? []);
-    layer.quadtree.drawRect(x1, y1, x2, y2, color, depth, bounds, clipContext);
-    layer.cleanup();
+    try {
+      adoptMapFromWorker(rectResult.map);
+    } catch (error) {
+      console.error('Failed to adopt map after rect operation', error);
+      ws.send('ERR Failed to update map after rect operation');
+      return;
+    }
 
     if (boardcasting) {
       const broadcastMessage = `RECT:${layerId}:${x1},${y1}:${x2},${y2}:${color}:${precision}`;
@@ -660,45 +748,72 @@ async function handleMessage(ws, message) {
       return;
     }
 
-    const result = layer.floodFill(x, y, color, precision, { maxCells: 200000 });
+    const targetLayerId = layer.id;
+    const fillResult = await enqueueQuadtreeTask('fill', {
+      map: serializeMapCompact(map),
+      layerId: targetLayerId,
+      x,
+      y,
+      color,
+      precision,
+      options: { maxCells: 200000 },
+    }).catch(error => {
+      console.error('Failed to process fill operation', error);
+      return { status: 'error', message: 'Worker failure while processing fill' };
+    });
 
-    if (result.reason === 'open_space') {
-      state.openFillAttempts = (state.openFillAttempts || 0) + 1;
-      state.lastOpenAttempt = now;
-      if (state.openFillAttempts >= 3) {
-        state.cooldownUntil = now + 3000;
-        state.openFillAttempts = 0;
+    if (!fillResult || fillResult.status !== 'ok') {
+      const reason = fillResult?.reason;
+      if (reason === 'open_space') {
+        state.openFillAttempts = (state.openFillAttempts || 0) + 1;
+        state.lastOpenAttempt = now;
+        if (state.openFillAttempts >= 3) {
+          state.cooldownUntil = now + 3000;
+          state.openFillAttempts = 0;
+        }
+        if (setClientState) setClientState(ws, state);
+        ws.send('ERR Paint bucket works only inside existing regions');
+        return;
       }
-      if (setClientState) setClientState(ws, state);
-      ws.send('ERR Paint bucket works only inside existing regions');
+
+      if (reason === 'limit_exceeded') {
+        ws.send('ERR Fill area too large; zoom in or refine the region');
+        return;
+      }
+
+      if (reason === 'invalid_precision') {
+        ws.send('ERR Invalid precision for fill operation');
+        return;
+      }
+
+      if (reason === 'out_of_bounds') {
+        ws.send('ERR Fill point outside of layer bounds');
+        return;
+      }
+
+      if (reason === 'no_target') {
+        ws.send('ERR Nothing to fill at target location');
+        return;
+      }
+
+      if (reason === 'already_filled') {
+        state.openFillAttempts = 0;
+        state.cooldownUntil = 0;
+        if (setClientState) setClientState(ws, state);
+        ws.send('OK Fill skipped (already target color)');
+        return;
+      }
+
+      const errorMessage = fillResult?.message ?? 'Unable to process fill command';
+      ws.send(`ERR ${errorMessage}`);
       return;
     }
 
-    if (result.reason === 'limit_exceeded') {
-      ws.send('ERR Fill area too large; zoom in or refine the region');
-      return;
-    }
-
-    if (result.reason === 'invalid_precision') {
-      ws.send('ERR Invalid precision for fill operation');
-      return;
-    }
-
-    if (result.reason === 'out_of_bounds') {
-      ws.send('ERR Fill point outside of layer bounds');
-      return;
-    }
-
-    if (result.reason === 'no_target') {
-      ws.send('ERR Nothing to fill at target location');
-      return;
-    }
-
-    if (result.reason === 'already_filled') {
-      state.openFillAttempts = 0;
-      state.cooldownUntil = 0;
-      if (setClientState) setClientState(ws, state);
-      ws.send('OK Fill skipped (already target color)');
+    try {
+      adoptMapFromWorker(fillResult.map);
+    } catch (error) {
+      console.error('Failed to adopt map after fill operation', error);
+      ws.send('ERR Failed to update map after fill operation');
       return;
     }
 
@@ -706,7 +821,7 @@ async function handleMessage(ws, message) {
     state.cooldownUntil = 0;
     if (setClientState) setClientState(ws, state);
 
-    const broadcastMessage = `FILL:${layer.id}:${x},${y}:${color}:${precision}`;
+    const broadcastMessage = `FILL:${targetLayerId}:${x},${y}:${color}:${precision}`;
     for (const [clientWs] of clients) {
       clientWs.send(broadcastMessage);
     }
@@ -740,20 +855,30 @@ async function handleMessage(ws, message) {
       ws.send('ERR Invalid layer ID');
       return;
     }
+    const polyResult = await enqueueQuadtreeTask('poly', {
+      map: serializeMapCompact(map),
+      layerId,
+      points: newPoints,
+      color,
+      precision,
+    }).catch(error => {
+      console.error('Failed to process polygon operation', error);
+      return { status: 'error', message: 'Worker failure while processing polygon' };
+    });
 
-    for (const [x, y] of newPoints) {
-      layer.expandTo(x, y);
+    if (!polyResult || polyResult.status !== 'ok') {
+      const errorMessage = polyResult?.message ?? 'Unable to process polygon command';
+      ws.send(`ERR ${errorMessage}`);
+      return;
     }
-    const [px, py] = layer.pos ?? [0, 0];
-    const [sx, sy] = layer.size ?? [1, 1];
-    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy };
 
-    const depth = Math.log2(layer.size[0] / precision);
-    console.log(depth)
-    const targetArea = map.findArea(color);
-    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? []);
-    layer.quadtree.drawPolygon(newPoints, color, depth, bounds, undefined, clipContext);
-    layer.cleanup();
+    try {
+      adoptMapFromWorker(polyResult.map);
+    } catch (error) {
+      console.error('Failed to adopt map after polygon operation', error);
+      ws.send('ERR Failed to update map after polygon operation');
+      return;
+    }
 
     const broadcastMessage = `POLY:${layerId}:${pointsStr}:${color}:${precision}`;
     for (const [clientWs] of clients) {

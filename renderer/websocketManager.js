@@ -4,6 +4,7 @@ import {
   Layer as LayerType,
   deserializeMap,
   deserializeMapCompact,
+  serializeMapCompact,
   deserializeLayerCompact,
   buildClipContext,
 } from '../dataframe.js'
@@ -22,6 +23,78 @@ export function createWebSocketManager({
   saveMap,
 }) {
   let socket
+
+  const hasWorkerSupport = typeof window !== 'undefined' && typeof Worker !== 'undefined'
+  let quadtreeWorker = null
+  let nextWorkerTaskId = 1
+  const pendingWorkerTasks = new Map()
+  let workerTaskChain = Promise.resolve()
+
+  if (hasWorkerSupport) {
+    try {
+      quadtreeWorker = new Worker(new URL('./quadtreeWorker.js', import.meta.url), {
+        type: 'module',
+      })
+      quadtreeWorker.onmessage = (event) => {
+        const { id, ...result } = event.data ?? {}
+        const pending = pendingWorkerTasks.get(id)
+        if (!pending) {
+          console.warn('Received unexpected quadtree worker response', result)
+          return
+        }
+        pendingWorkerTasks.delete(id)
+        pending.resolve(result)
+      }
+      quadtreeWorker.onerror = (error) => {
+        console.error('Quadtree worker error', error)
+        for (const pending of pendingWorkerTasks.values()) {
+          pending.reject(error)
+        }
+        pendingWorkerTasks.clear()
+        quadtreeWorker.terminate().catch(() => {})
+        quadtreeWorker = null
+      }
+    } catch (error) {
+      console.error('Failed to initialize quadtree worker', error)
+      quadtreeWorker = null
+    }
+  }
+
+  function runWorkerTask(type, payload) {
+    if (!quadtreeWorker) {
+      return Promise.reject(new Error('Quadtree worker unavailable'))
+    }
+    return new Promise((resolve, reject) => {
+      const id = nextWorkerTaskId++
+      pendingWorkerTasks.set(id, { resolve, reject })
+      try {
+        quadtreeWorker.postMessage({ id, type, payload })
+      } catch (error) {
+        pendingWorkerTasks.delete(id)
+        reject(error)
+      }
+    })
+  }
+
+  function enqueueWorkerTask(type, payload) {
+    const task = workerTaskChain.then(() => runWorkerTask(type, payload))
+    workerTaskChain = task.catch(() => {})
+    return task
+  }
+
+  function adoptMapFromWorker(mapData, layerIds = []) {
+    if (!setMap) return
+    const nextMap = deserializeMapCompact(mapData)
+    for (const id of layerIds) {
+      const layer = nextMap.findLayer(id)
+      if (layer) {
+        layer.calculateAreas()
+      }
+    }
+    setMap(nextMap)
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
 
   const createYieldToUI = () => {
     if (typeof window === 'undefined') {
@@ -51,6 +124,84 @@ export function createWebSocketManager({
   const yieldToUI = createYieldToUI()
   const messageQueue = []
   let processingQueue = false
+
+  async function drawLineLocally(layer, map, { x1, y1, x2, y2, areaId, width, precision }) {
+    layer.expandTo(x1, y1)
+    layer.expandTo(x2, y2)
+    const [px, py] = layer.pos ?? [0, 0]
+    const [sx, sy] = layer.size ?? [1, 1]
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+    const depth = Math.log2(layer.size[0] / precision)
+    const targetArea = map.findArea(areaId)
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
+    await yieldToUI()
+    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipContext)
+    await yieldToUI()
+    layer.cleanup()
+    await yieldToUI()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
+
+  async function drawRectLocally(layer, map, { x1, y1, x2, y2, areaId, precision }) {
+    layer.expandTo(x1, y1)
+    layer.expandTo(x2, y2)
+    const [px, py] = layer.pos ?? [0, 0]
+    const [sx, sy] = layer.size ?? [1, 1]
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+    const depth = Math.log2(layer.size[0] / precision)
+    const targetArea = map.findArea(areaId)
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
+    await yieldToUI()
+    layer.quadtree.drawRect(
+      Math.min(x1, x2),
+      Math.min(y1, y2),
+      Math.max(x1, x2),
+      Math.max(y1, y2),
+      areaId,
+      depth,
+      bounds,
+      clipContext,
+    )
+    await yieldToUI()
+    layer.cleanup()
+    await yieldToUI()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
+
+  async function drawPolygonLocally(layer, map, { points, areaId, precision }) {
+    for (const [x, y] of points) {
+      layer.expandTo(x, y)
+    }
+    const [px, py] = layer.pos ?? [0, 0]
+    const [sx, sy] = layer.size ?? [1, 1]
+    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
+    const depth = Math.log2(layer.size[0] / precision)
+    const targetArea = map.findArea(areaId)
+    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
+    await yieldToUI()
+    layer.quadtree.drawPolygon(points, areaId, depth, bounds, undefined, clipContext)
+    await yieldToUI()
+    layer.cleanup()
+    await yieldToUI()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
+
+  async function floodFillLocally(layer, { x, y, areaId, precision }) {
+    await yieldToUI()
+    layer.floodFill(x, y, areaId, precision)
+    await yieldToUI()
+    layer.cleanup()
+    await yieldToUI()
+    layer.calculateAreas()
+    bumpMapUpdate?.()
+    updateCanvas?.()
+  }
 
   const setConnected = (value) => {
     if (onConnectedChange) {
@@ -122,22 +273,32 @@ export function createWebSocketManager({
     if (!map) return
     const layer = map.findLayer(Number(layerId))
     if (!layer) return
-    layer.expandTo(x1, y1)
-    layer.expandTo(x2, y2)
-    const [px, py] = layer.pos ?? [0, 0]
-    const [sx, sy] = layer.size ?? [1, 1]
-    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
-    const depth = Math.log2(layer.size[0] / precision)
-    const targetArea = map.findArea(areaId)
-    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
-    await yieldToUI()
-    layer.quadtree.drawLine(x1, y1, x2, y2, width, areaId, depth, bounds, clipContext)
-    await yieldToUI()
-    layer.cleanup()
-    await yieldToUI()
-    layer.calculateAreas()
-    bumpMapUpdate?.()
-    updateCanvas?.()
+    let handled = false
+    if (quadtreeWorker) {
+      const workerResult = await enqueueWorkerTask('line', {
+        map: serializeMapCompact(map),
+        layerId: Number(layerId),
+        x1,
+        y1,
+        x2,
+        y2,
+        color: areaId,
+        brushSize: width,
+        precision,
+      }).catch((error) => {
+        console.error('Failed to process line in worker', error)
+        return null
+      })
+      if (workerResult && workerResult.status === 'ok') {
+        adoptMapFromWorker(workerResult.map, [Number(layerId)])
+        handled = true
+      } else if (workerResult && workerResult.status === 'error') {
+        console.warn('Quadtree worker reported error for line operation', workerResult.message ?? workerResult.reason)
+      }
+    }
+    if (!handled) {
+      await drawLineLocally(layer, map, { x1, y1, x2, y2, areaId, width, precision })
+    }
   }
 
   const handleDeleteLayerMessage = (data) => {
@@ -176,31 +337,31 @@ export function createWebSocketManager({
     const layer = map.findLayer(Number(layerId))
     if (!layer) return
     const parsedAreaId = Number(areaId)
-    layer.expandTo(x1, y1)
-    layer.expandTo(x2, y2)
-    const [px, py] = layer.pos ?? [0, 0]
-    const [sx, sy] = layer.size ?? [1, 1]
-    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
-    const depth = Math.log2(layer.size[0] / precision)
-    const targetArea = map.findArea(parsedAreaId)
-    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
-    await yieldToUI()
-    layer.quadtree.drawRect(
-      Math.min(x1, x2),
-      Math.min(y1, y2),
-      Math.max(x1, x2),
-      Math.max(y1, y2),
-      parsedAreaId,
-      depth,
-      bounds,
-      clipContext,
-    )
-    await yieldToUI()
-    layer.cleanup()
-    await yieldToUI()
-    layer.calculateAreas()
-    bumpMapUpdate?.()
-    updateCanvas?.()
+    let handled = false
+    if (quadtreeWorker) {
+      const workerResult = await enqueueWorkerTask('rect', {
+        map: serializeMapCompact(map),
+        layerId: Number(layerId),
+        x1,
+        y1,
+        x2,
+        y2,
+        color: parsedAreaId,
+        precision,
+      }).catch((error) => {
+        console.error('Failed to process rect in worker', error)
+        return null
+      })
+      if (workerResult && workerResult.status === 'ok') {
+        adoptMapFromWorker(workerResult.map, [Number(layerId)])
+        handled = true
+      } else if (workerResult && workerResult.status === 'error') {
+        console.warn('Quadtree worker reported error for rect operation', workerResult.message ?? workerResult.reason)
+      }
+    }
+    if (!handled) {
+      await drawRectLocally(layer, map, { x1, y1, x2, y2, areaId: parsedAreaId, precision })
+    }
   }
 
   const handleLayerMessage = async (data) => {
@@ -237,29 +398,34 @@ export function createWebSocketManager({
     if (!map) return
     const layer = map.findLayer(Number(layerId))
     if (!layer) return
-    const points = pointsStr.split(',').map((value) => Number(value))
+    const rawPoints = pointsStr.split(',').map((value) => Number(value))
     const parsedAreaId = Number(areaId)
-    for (let i = 0; i < points.length; i += 2) {
-      layer.expandTo(points[i], points[i + 1])
-    }
-    const [px, py] = layer.pos ?? [0, 0]
-    const [sx, sy] = layer.size ?? [1, 1]
-    const bounds = { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
     const newPoints = []
-    for (let i = 0; i < points.length; i += 2) {
-      newPoints.push([points[i], points[i + 1]])
+    for (let i = 0; i < rawPoints.length; i += 2) {
+      newPoints.push([rawPoints[i], rawPoints[i + 1]])
     }
-    const depth = Math.log2(layer.size[0] / precision)
-    const targetArea = map.findArea(parsedAreaId)
-    const clipContext = buildClipContext(map, layer, targetArea?.clipAreas ?? [])
-    await yieldToUI()
-    layer.quadtree.drawPolygon(newPoints, parsedAreaId, depth, bounds, undefined, clipContext)
-    await yieldToUI()
-    layer.cleanup()
-    await yieldToUI()
-    layer.calculateAreas()
-    bumpMapUpdate?.()
-    updateCanvas?.()
+    let handled = false
+    if (quadtreeWorker) {
+      const workerResult = await enqueueWorkerTask('poly', {
+        map: serializeMapCompact(map),
+        layerId: Number(layerId),
+        points: newPoints,
+        color: parsedAreaId,
+        precision,
+      }).catch((error) => {
+        console.error('Failed to process polygon in worker', error)
+        return null
+      })
+      if (workerResult && workerResult.status === 'ok') {
+        adoptMapFromWorker(workerResult.map, [Number(layerId)])
+        handled = true
+      } else if (workerResult && workerResult.status === 'error') {
+        console.warn('Quadtree worker reported error for polygon operation', workerResult.message ?? workerResult.reason)
+      }
+    }
+    if (!handled) {
+      await drawPolygonLocally(layer, map, { points: newPoints, areaId: parsedAreaId, precision })
+    }
   }
 
   const handleFillMessage = async (data) => {
@@ -280,14 +446,30 @@ export function createWebSocketManager({
     if (!map) return
     const layer = map.findLayer(layerId)
     if (!layer) return
-    await yieldToUI()
-    layer.floodFill(x, y, areaId, precision)
-    await yieldToUI()
-    layer.cleanup()
-    await yieldToUI()
-    layer.calculateAreas()
-    bumpMapUpdate?.()
-    updateCanvas?.()
+    let handled = false
+    if (quadtreeWorker) {
+      const workerResult = await enqueueWorkerTask('fill', {
+        map: serializeMapCompact(map),
+        layerId,
+        x,
+        y,
+        color: areaId,
+        precision,
+        options: { maxCells: 200000 },
+      }).catch((error) => {
+        console.error('Failed to process fill in worker', error)
+        return null
+      })
+      if (workerResult && workerResult.status === 'ok') {
+        adoptMapFromWorker(workerResult.map, [layerId])
+        handled = true
+      } else if (workerResult && workerResult.status === 'error') {
+        console.warn('Quadtree worker reported error for fill operation', workerResult.message ?? workerResult.reason)
+      }
+    }
+    if (!handled) {
+      await floodFillLocally(layer, { x, y, areaId, precision })
+    }
   }
 
   const handleDisconnectMessage = (data) => {
