@@ -315,7 +315,10 @@ function buildTools({
             polygonVars.points = []
             polygonVars.brushing = true
           }
-          polygonVars.points.push({ x: event.clientX, y: event.clientY })
+          const rect = ensureCanvasRect()
+          const x = camera.toWorldX(event.clientX - (rect ? rect.left : 0))
+          const y = camera.toWorldY(event.clientY - (rect ? rect.top : 0))
+          polygonVars.points.push({ x, y })
           updateCanvas()
         } else if (event.button === 2) {
           if (!polygonVars.brushing || polygonVars.points.length < 3) return
@@ -325,8 +328,7 @@ function buildTools({
           const canvas = getCanvas()
           if (!selectedArea || !map || !canvas) return
           const worldPoints = polygonVars.points.map((point) => {
-            const wp = toWorldPoint(point.x, point.y)
-            return wp ? `${wp.x},${wp.y}` : null
+            return `${point.x},${point.y}`;
           }).filter(Boolean)
           if (worldPoints.length !== polygonVars.points.length) return
           const precision = 1 / camera.zoom;
@@ -348,19 +350,18 @@ function buildTools({
         ctx.strokeStyle = 'blue'
         ctx.lineWidth = 2
         ctx.beginPath()
-        ctx.moveTo(polygonVars.points[0].x - rect.left, polygonVars.points[0].y - rect.top)
-        for (let i = 1; i < polygonVars.points.length; i += 1) {
-          ctx.lineTo(polygonVars.points[i].x - rect.left, polygonVars.points[i].y - rect.top)
+        for (let i = 0; i < polygonVars.points.length; i += 1) {
+          const point = polygonVars.points[i]
+          const wx = camera.toScreenX(point.x)
+          const wy = camera.toScreenY(point.y)
+          if (i === 0) {
+            ctx.moveTo(wx, wy)
+          } else {
+            ctx.lineTo(wx, wy)
+          }
         }
         ctx.lineTo(polygonVars.toX - rect.left, polygonVars.toY - rect.top)
         ctx.stroke()
-
-        for (const point of polygonVars.points) {
-          ctx.fillStyle = 'blue'
-          ctx.beginPath()
-          ctx.arc(point.x - rect.left, point.y - rect.top, 5, 0, Math.PI * 2)
-          ctx.fill()
-        }
       },
     },
     {
