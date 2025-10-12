@@ -83,6 +83,10 @@ function buildTools({
     areaId: null,
   }
 
+  const yieldFrame = typeof window !== 'undefined' && typeof requestAnimationFrame === 'function'
+    ? () => new Promise(resolve => requestAnimationFrame(() => resolve()))
+    : () => new Promise(resolve => setTimeout(resolve, 0))
+
   async function applyBrushStroke(layer, map, segments) {
     if (!layer || !map) return false
     if (!Array.isArray(segments) || segments.length === 0) return false
@@ -120,8 +124,8 @@ function buildTools({
       for (const segment of segments) {
         drawLineSafely(segment)
         segmentsApplied += 1
-        if ((segmentsApplied & 7) === 0) {
-          await tick()
+        if (segmentsApplied % 4 === 0) {
+          await yieldFrame()
         }
       }
     } catch (error) {
@@ -566,10 +570,10 @@ function buildTools({
           ctx.lineJoin = 'round'
           ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
           for (const segment of brushVars.segments) {
-            const sx1 = camera.toScreenX(segment.x1) - rect.left
-            const sy1 = camera.toScreenY(segment.y1) - rect.top
-            const sx2 = camera.toScreenX(segment.x2) - rect.left
-            const sy2 = camera.toScreenY(segment.y2) - rect.top
+            const sx1 = camera.toScreenX(segment.x1)
+            const sy1 = camera.toScreenY(segment.y1)
+            const sx2 = camera.toScreenX(segment.x2)
+            const sy2 = camera.toScreenY(segment.y2)
             ctx.lineWidth = segment.width * camera.zoom
             ctx.beginPath()
             ctx.moveTo(sx1, sy1)
