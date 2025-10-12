@@ -273,10 +273,10 @@ function buildTools({
         if (lineVars.brushing) {
           const rect = ensureCanvasRect()
           if (!rect) return
-          const startX = lineVars.x - rect.left
-          const startY = lineVars.y - rect.top
-          const endX = lineVars.toX - rect.left
-          const endY = lineVars.toY - rect.top
+          const startX = lineVars.x
+          const startY = lineVars.y
+          const endX = lineVars.toX
+          const endY = lineVars.toY
           ctx.fillStyle = 'blue'
           ctx.beginPath()
           ctx.arc(startX, startY, lineVars.width * camera.zoom / 2, 0, Math.PI * 2)
@@ -293,8 +293,8 @@ function buildTools({
         } else {
           const rect = ensureCanvasRect()
           if (!rect) return
-          const x = lineVars.x - rect.left
-          const y = lineVars.y - rect.top
+          const x = lineVars.x
+          const y = lineVars.y
           ctx.strokeStyle = 'black'
           ctx.lineWidth = 1
           ctx.beginPath()
