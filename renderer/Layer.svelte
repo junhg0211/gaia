@@ -1,7 +1,7 @@
 <script>
   import Area from './Area.svelte';
   import Layer from './Layer.svelte';
-  import { Quadtree, Area as AreaType, Layer as LayerType } from "../dataframe.js";
+  import { Quadtree, Area as AreaType, Layer as LayerType } from '../dataframe.js';
   import "bootstrap-icons/font/bootstrap-icons.css";
 
   export let layer;
@@ -15,46 +15,57 @@
   let name = "새 영역";
 
   async function addArea() {
-    ws.send('SNAP')
+    ws.send('SNAP');
     ws.send(`NEWA:${layer.id}:${name}:${color}`);
   }
 
   let layerName = "새 레이어";
 
   async function addLayer() {
-    ws.send('SNAP')
+    ws.send('SNAP');
     ws.send(`NEWL:${layer.id}:${layerName}`);
   }
 
   async function deleteLayer() {
-    ws.send('SNAP')
+    ws.send('SNAP');
     ws.send(`DELL:${layer.id}`);
   }
 
   function changeLayerName(event) {
     const newName = event.target.value;
-    ws.send('SNAP')
+    ws.send('SNAP');
     ws.send(`SELN:${layer.id}:${newName}`);
   }
 
   let unfold = true;
+  let visible = true;
+  let previousLayer = null;
+
+  $: if (layer && layer !== previousLayer) {
+    visible = layer.visible ?? visible;
+    unfold = layer.unfold ?? unfold;
+    previousLayer = layer;
+  }
 
   function upLayer() {
     const index = layer.parent.children.indexOf(layer) - 1;
-    ws.send('SNAP')
+    ws.send('SNAP');
     ws.send(`LYOD:${layer.id}:${index}`);
   }
 
   function downLayer() {
     const index = layer.parent.children.indexOf(layer) + 2;
-    ws.send('SNAP')
+    ws.send('SNAP');
     ws.send(`LYOD:${layer.id}:${index}`);
   }
 
-  let visible = true;
-  $: {
+  $: if (layer && layer.visible !== visible) {
     layer.visible = visible;
     updateCanvas();
+  }
+
+  $: if (layer) {
+    layer.unfold = unfold;
   }
 
   layer.opacity = layer.opacity ?? 1.0;

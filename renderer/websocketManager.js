@@ -17,6 +17,9 @@ function copyLayerUiState(source, target) {
   if (Object.prototype.hasOwnProperty.call(source, 'opacity')) {
     target.opacity = source.opacity
   }
+  if (Object.prototype.hasOwnProperty.call(source, 'unfold')) {
+    target.unfold = source.unfold
+  }
   const sourceChildren = Array.isArray(source.children) ? source.children : []
   const targetChildren = Array.isArray(target.children) ? target.children : []
   const sourceChildMap = new Map()
