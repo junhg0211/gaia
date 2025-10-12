@@ -55,6 +55,8 @@
 
   let nowTool
 
+  let registerLocalLayerUpdateFn = () => {}
+
   const canvasController = createCanvasController({
     getMap: () => map,
     getCurrentTool: () => nowTool,
@@ -65,6 +67,7 @@
     setSelectedArea: (area) => { selectedArea = area },
     bumpMapUpdate: () => { mapUpdate = (mapUpdate + 1) % 1000000 },
     isConnected: () => connected,
+    registerLocalLayerUpdate: (...args) => registerLocalLayerUpdateFn(...args),
     onImageProcessingStart: () => {
       imageProgress = { percent: 0, stage: '준비 중', etaSeconds: null }
     },
@@ -122,9 +125,12 @@
       mapUpdate = (mapUpdate + 1) % 1000000
     },
     getCursors: () => cursors,
+    getSelectedArea: () => selectedArea,
+    setSelectedArea: (area) => { selectedArea = area },
   })
 
-  const { connect, reloadMap: requestReload } = webSocketManager
+  const { connect, reloadMap: requestReload, registerLocalLayerUpdate } = webSocketManager
+  registerLocalLayerUpdateFn = registerLocalLayerUpdate
 
   function saveMap() {
     if (!connected || !ws || !map) return

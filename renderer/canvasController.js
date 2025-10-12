@@ -1402,6 +1402,7 @@ export function createCanvasController(options) {
     isConnected,
     setSelectedArea,
     bumpMapUpdate,
+    registerLocalLayerUpdate = () => {},
     onMousePositionChange = () => {},
     onImageProcessingStart = () => {},
     onImageProcessingProgress = () => {},
@@ -1460,6 +1461,20 @@ export function createCanvasController(options) {
     setSelectedArea,
     bumpMapUpdate,
     sendMessage: (message) => {
+      if (typeof message === 'string' && message.startsWith('SET_LAYER:')) {
+        const firstColon = message.indexOf(':', 9)
+        if (firstColon !== -1) {
+          const secondColon = message.indexOf(':', firstColon + 1)
+          if (secondColon !== -1) {
+            const layerIdStr = message.slice(firstColon + 1, secondColon)
+            const payload = message.slice(secondColon + 1)
+            const layerId = Number(layerIdStr)
+            if (Number.isFinite(layerId)) {
+              registerLocalLayerUpdate(layerId, payload)
+            }
+          }
+        }
+      }
       const socket = getWs?.()
       if (!socket || !isConnected?.()) return
       socket.send(message)

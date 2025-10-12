@@ -9,6 +9,31 @@ import {
   buildClipContext,
 } from '../dataframe.js'
 
+function copyLayerUiState(source, target) {
+  if (!source || !target) return
+  if (Object.prototype.hasOwnProperty.call(source, 'visible')) {
+    target.visible = source.visible
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'opacity')) {
+    target.opacity = source.opacity
+  }
+  const sourceChildren = Array.isArray(source.children) ? source.children : []
+  const targetChildren = Array.isArray(target.children) ? target.children : []
+  const sourceChildMap = new Map()
+  for (const child of sourceChildren) {
+    if (child && Number.isFinite(child.id)) {
+      sourceChildMap.set(child.id, child)
+    }
+  }
+  for (const child of targetChildren) {
+    if (!child || !Number.isFinite(child.id)) continue
+    const match = sourceChildMap.get(child.id)
+    if (match) {
+      copyLayerUiState(match, child)
+    }
+  }
+}
+
 export function createWebSocketManager({
   getWsAddress,
   getUsername,
@@ -21,6 +46,8 @@ export function createWebSocketManager({
   bumpMapUpdate,
   getCursors,
   saveMap,
+  getSelectedArea,
+  setSelectedArea,
 }) {
   let socket
 
@@ -29,6 +56,7 @@ export function createWebSocketManager({
   let nextWorkerTaskId = 1
   const pendingWorkerTasks = new Map()
   let workerTaskChain = Promise.resolve()
+  const localLayerUpdates = new Map()
 
   if (hasWorkerSupport) {
     try {
@@ -84,7 +112,11 @@ export function createWebSocketManager({
 
   function adoptMapFromWorker(mapData, layerIds = []) {
     if (!setMap) return
+    const currentMap = getMap?.()
     const nextMap = deserializeMapCompact(mapData)
+    if (currentMap?.layer && nextMap?.layer) {
+      copyLayerUiState(currentMap.layer, nextMap.layer)
+    }
     for (const id of layerIds) {
       const layer = nextMap.findLayer(id)
       if (layer) {
@@ -92,6 +124,14 @@ export function createWebSocketManager({
       }
     }
     setMap(nextMap)
+    if (typeof getSelectedArea === 'function' && typeof setSelectedArea === 'function') {
+      const currentSelected = getSelectedArea()
+      if (currentSelected) {
+        const refreshed = nextMap.findArea(currentSelected.id)
+        setSelectedArea(refreshed ?? null)
+      }
+    }
+    localLayerUpdates.clear()
     bumpMapUpdate?.()
     updateCanvas?.()
   }
@@ -211,9 +251,21 @@ export function createWebSocketManager({
 
   const handleMapMessage = async (data) => {
     const mapData = data.slice(4)
+    const currentMap = getMap?.()
     await yieldToUI()
     const parsed = deserializeMap(JSON.parse(mapData))
+    if (currentMap?.layer && parsed?.layer) {
+      copyLayerUiState(currentMap.layer, parsed.layer)
+    }
     setMap(parsed)
+    if (typeof getSelectedArea === 'function' && typeof setSelectedArea === 'function') {
+      const currentSelected = getSelectedArea()
+      if (currentSelected) {
+        const refreshed = parsed.findArea(currentSelected.id)
+        setSelectedArea(refreshed ?? null)
+      }
+    }
+    localLayerUpdates.clear()
     await yieldToUI()
     parsed.layer.calculateAllAreas()
     await yieldToUI()
@@ -222,9 +274,21 @@ export function createWebSocketManager({
 
   const handleMapCompactMessage = async (data) => {
     const payload = data.slice(5)
+    const currentMap = getMap?.()
     await yieldToUI()
     const parsed = deserializeMapCompact(JSON.parse(payload))
+    if (currentMap?.layer && parsed?.layer) {
+      copyLayerUiState(currentMap.layer, parsed.layer)
+    }
     setMap(parsed)
+    if (typeof getSelectedArea === 'function' && typeof setSelectedArea === 'function') {
+      const currentSelected = getSelectedArea()
+      if (currentSelected) {
+        const refreshed = parsed.findArea(currentSelected.id)
+        setSelectedArea(refreshed ?? null)
+      }
+    }
+    localLayerUpdates.clear()
     await yieldToUI()
     parsed.layer.calculateAllAreas()
     await yieldToUI()
@@ -380,11 +444,38 @@ export function createWebSocketManager({
     const map = getMap?.()
     if (!map) return
 
+    const layerId = Number(layerData?.id)
+    if (Number.isFinite(layerId)) {
+      const queued = localLayerUpdates.get(layerId)
+      if (queued && queued.length > 0) {
+        const index = queued.indexOf(payload)
+        if (index !== -1) {
+          queued.splice(index, 1)
+          if (queued.length === 0) {
+            localLayerUpdates.delete(layerId)
+          }
+          return
+        }
+      }
+    }
+
+    const existingLayer = Number.isFinite(layerId) ? map.findLayer(layerId) : null
     await yieldToUI()
     const nextLayer = deserializeLayerCompact(layerData, null)
     await yieldToUI()
+    if (existingLayer) {
+      copyLayerUiState(existingLayer, nextLayer)
+    }
     const updated = map.replaceLayer(nextLayer, parentId === undefined ? null : parentId)
     if (!updated) return
+
+    if (typeof getSelectedArea === 'function' && typeof setSelectedArea === 'function') {
+      const currentSelected = getSelectedArea()
+      if (currentSelected) {
+        const refreshed = map.findArea(currentSelected.id)
+        setSelectedArea(refreshed ?? null)
+      }
+    }
 
     bumpMapUpdate?.()
     updateCanvas?.()
@@ -702,10 +793,26 @@ export function createWebSocketManager({
     }
   }
 
+  function registerLocalLayerUpdate(layerId, payload) {
+    const id = Number(layerId)
+    if (!Number.isFinite(id)) return
+    if (typeof payload !== 'string' || payload.length === 0) return
+    const queue = localLayerUpdates.get(id)
+    if (queue) {
+      queue.push(payload)
+      if (queue.length > 8) {
+        queue.splice(0, queue.length - 8)
+      }
+    } else {
+      localLayerUpdates.set(id, [payload])
+    }
+  }
+
   const connect = () => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close()
     }
+    localLayerUpdates.clear()
     let address = getWsAddress?.()
     if (!/:/.test(address)) {
       address += ':48829'
@@ -759,5 +866,6 @@ export function createWebSocketManager({
     connect,
     reloadMap,
     reloadLayer,
+    registerLocalLayerUpdate,
   }
 }
