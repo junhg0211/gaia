@@ -37,14 +37,12 @@
     ws.send(`SELN:${layer.id}:${newName}`);
   }
 
-  let unfold = true;
-  let visible = true;
-  let previousLayer = null;
+  $: if (layer && layer.visible === undefined) {
+    layer.visible = true;
+  }
 
-  $: if (layer && layer !== previousLayer) {
-    visible = layer.visible ?? visible;
-    unfold = layer.unfold ?? unfold;
-    previousLayer = layer;
+  $: if (layer && layer.unfold === undefined) {
+    layer.unfold = true;
   }
 
   function upLayer() {
@@ -59,13 +57,15 @@
     ws.send(`LYOD:${layer.id}:${index}`);
   }
 
-  $: if (layer && layer.visible !== visible) {
-    layer.visible = visible;
+  function handleVisibleChange(event) {
+    if (!layer) return;
+    layer.visible = event.target.checked;
     updateCanvas();
   }
 
-  $: if (layer) {
-    layer.unfold = unfold;
+  function handleUnfoldChange(event) {
+    if (!layer) return;
+    layer.unfold = event.target.checked;
   }
 
   layer.opacity = layer.opacity ?? 1.0;
@@ -73,13 +73,13 @@
 
 <div class="layer-container">
   <div class="name">
-    <input type="checkbox" bind:checked={visible} />
-    {#if visible}
-    <input type="checkbox" bind:checked={unfold} />
+    <input type="checkbox" checked={layer.visible} on:change={handleVisibleChange} />
+    {#if layer.visible}
+    <input type="checkbox" checked={layer.unfold} on:change={handleUnfoldChange} />
     {/if}
     <input type="text" bind:value={layer.name} on:change={changeLayerName} />
   </div>
-  {#if unfold && visible}
+  {#if layer.unfold && layer.visible}
   <div>
     <div class="add-area-inputs">
       <button on:click={addArea}><i class="bi bi-palette2"></i></button>
