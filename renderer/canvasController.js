@@ -9,6 +9,8 @@ import {
   worldToMeters,
 } from './units.js'
 
+const MIN_AREA_LABEL_SCREEN = 6000
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
 }
@@ -1589,7 +1591,12 @@ export function createCanvasController(options) {
       const renderAreaNames = (layer) => {
         layer.areas.forEach((area) => {
           if (!area.name || area.name.trim() === '') return
+          if (!layer.visible) return
           if (!area.areaPoint) return
+          const areaValue = Number(area.area)
+          if (!Number.isFinite(areaValue)) return
+          const screenAreaEstimate = areaValue * camera.zoom * camera.zoom
+          if (screenAreaEstimate < MIN_AREA_LABEL_SCREEN) return
           const x = camera.toScreenX(area.areaPoint[0])
           const y = camera.toScreenY(area.areaPoint[1])
           if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) return
