@@ -9,7 +9,7 @@ import {
   worldToMeters,
 } from './units.js'
 
-const MIN_AREA_LABEL_SCREEN = 6000
+const MIN_AREA_LABEL_SCREEN = 10000
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(value, max))
