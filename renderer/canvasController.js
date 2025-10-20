@@ -566,11 +566,17 @@ function buildTools({
         ctx.beginPath()
         ctx.arc(x, y, brushVars.width / 2, 0, Math.PI * 2)
         ctx.stroke()
+        ctx.fillStyle = 'black'
+        ctx.font = '12px Arial'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'top'
+        const width = brushVars.width / camera.zoom
+        ctx.fillText(`${width.toFixed(2)} km`, x, y + brushVars.width / 2 + 4)
         if (brushVars.segments.length > 0) {
           ctx.save()
           ctx.lineCap = 'round'
           ctx.lineJoin = 'round'
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)'
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)'
           for (const segment of brushVars.segments) {
             const sx1 = camera.toScreenX(segment.x1)
             const sy1 = camera.toScreenY(segment.y1)
