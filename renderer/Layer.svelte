@@ -100,15 +100,15 @@
       {/each}
     {/if}
   </div>
+  {/if}
   <div class="child-layers">
     <div class="add-layer-inputs">
       <button on:click={addLayer}><i class="bi bi-file-plus"></i></button>
     </div>
     {#each layer.children as child}
-    <Layer {data} {ws} {selectedArea} layer={child} on:areaselect />
+      <Layer {data} {ws} {selectedArea} layer={child} on:areaselect />
     {/each}
   </div>
-  {/if}
 </div>
 
 <style>
