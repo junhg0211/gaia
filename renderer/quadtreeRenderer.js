@@ -1,15 +1,14 @@
-const MAX_BASE_TEXTURE_SIZE = 8192
-const DETAIL_RATIO_THRESHOLD = 1.05
-const MIN_DETAIL_SCREEN_SIZE = 1
-const SUB_PIXEL_SKIP_THRESHOLD = 1
+const MAX_TEXTURE_SIZE = 8192
+const DETAIL_RATIO = 1.08
+const MIN_SCREEN_PIXELS = 0.75
 
-function canCreateCanvas() {
+function supportsCanvas() {
   if (typeof OffscreenCanvas !== 'undefined') return true
   if (typeof document !== 'undefined' && typeof document.createElement === 'function') return true
   return false
 }
 
-function createCanvas(width, height) {
+function makeCanvas(width, height) {
   if (typeof OffscreenCanvas !== 'undefined') {
     return new OffscreenCanvas(width, height)
   }
@@ -22,38 +21,42 @@ function createCanvas(width, height) {
   return null
 }
 
-function getLayerBounds(layer) {
+function readLayerBounds(layer) {
   if (layer && typeof layer.getBounds === 'function') {
     return layer.getBounds()
   }
-  const [px = 0, py = 0] = layer?.pos ?? [0, 0]
-  const [sx = 1, sy = 1] = layer?.size ?? [1, 1]
+  const [px = 0, py = 0] = Array.isArray(layer?.pos) ? layer.pos : [0, 0]
+  const [sx = 0, sy = 0] = Array.isArray(layer?.size) ? layer.size : [0, 0]
   return { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
 }
 
-function computeAreaSignature(layer) {
-  if (!layer?.areas) return ''
-  return layer.areas.map(area => `${area.id}:${area.color}`).join('|')
+function areaSignature(layer) {
+  if (!Array.isArray(layer?.areas)) return ''
+  const parts = layer.areas
+    .slice()
+    .sort((a, b) => (a?.id ?? 0) - (b?.id ?? 0))
+    .map(area => `${area.id}:${area.color}`)
+  return parts.join(';')
 }
 
-function buildAreaColorMap(layer) {
-  const map = new Map()
-  if (!layer?.areas) return map
+function colorLookup(layer) {
+  const lookup = new Map()
+  if (!Array.isArray(layer?.areas)) return lookup
   for (const area of layer.areas) {
-    map.set(area.id, area.color)
+    lookup.set(area.id, area.color)
   }
-  return map
+  return lookup
 }
 
-function computeQuadtreeDepth(root) {
+function measureDepth(root) {
   if (!root) return 0
   let maxDepth = 0
   const stack = [{ node: root, depth: 0 }]
-  while (stack.length > 0) {
+  while (stack.length) {
     const { node, depth } = stack.pop()
     if (!node) continue
     if (depth > maxDepth) maxDepth = depth
-    if (!node.isLeaf() && node.children) {
+    if (!node.isLeaf?.() && Array.isArray(node.children)) {
       for (const child of node.children) {
         if (child) stack.push({ node: child, depth: depth + 1 })
       }
@@ -62,319 +65,256 @@ function computeQuadtreeDepth(root) {
   return maxDepth
 }
 
-function renderTreeToCanvas(node, canvas, ctx, bounds, areaColors) {
-  if (!canvas || !ctx || !node) return
-  const width = bounds.maxX - bounds.minX
-  const height = bounds.maxY - bounds.minY
-  if (width <= 0 || height <= 0) return
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  if (typeof ctx.imageSmoothingEnabled === 'boolean') {
-    ctx.imageSmoothingEnabled = false
-  }
-
-  const scaleX = canvas.width / width
-  const scaleY = canvas.height / height
-
-  const drawNode = (current, nodeBounds) => {
-    if (!current) return
-
-    if (current.isLeaf()) {
-      if (current.value === 0) return
-      const color = areaColors.get(current.value)
-      if (!color || color === 'transparent') return
-      const minX = (nodeBounds.minX - bounds.minX) * scaleX
-      const minY = (nodeBounds.minY - bounds.minY) * scaleY
-      const nodeWidth = (nodeBounds.maxX - nodeBounds.minX) * scaleX
-      const nodeHeight = (nodeBounds.maxY - nodeBounds.minY) * scaleY
-      ctx.fillStyle = color
-      ctx.fillRect(minX, minY, nodeWidth, nodeHeight)
-      return
-    }
-
-    const midX = (nodeBounds.minX + nodeBounds.maxX) / 2
-    const midY = (nodeBounds.minY + nodeBounds.maxY) / 2
-    const childBounds = [
-      { minX: nodeBounds.minX, minY: nodeBounds.minY, maxX: midX, maxY: midY },
-      { minX: midX, minY: nodeBounds.minY, maxX: nodeBounds.maxX, maxY: midY },
-      { minX: nodeBounds.minX, minY: midY, maxX: midX, maxY: nodeBounds.maxY },
-      { minX: midX, minY: midY, maxX: nodeBounds.maxX, maxY: nodeBounds.maxY },
-    ]
-
-    for (let i = 0; i < 4; i += 1) {
-      const child = current.getChild(i)
-      if (!child) continue
-      drawNode(child, childBounds[i])
-    }
-  }
-
-  drawNode(node, bounds)
-}
-
-function renderQuadtreeToCanvas(layer, canvas, ctx, bounds, areaColors) {
-  if (!layer?.quadtree) return
-  renderTreeToCanvas(layer.quadtree, canvas, ctx, bounds, areaColors)
-}
-
-function ensureLayerCache(layer, cacheStore) {
-  if (!layer) return null
-  let cache = cacheStore.get(layer)
-  if (!cache) {
-    cache = {
-      baseCanvas: null,
-      baseCtx: null,
-      baseVersion: -1,
-      areaSignature: '',
-      boundsSignature: '',
-      basePixelsPerUnitX: 0,
-      basePixelsPerUnitY: 0,
-      bounds: null,
-      areaColors: new Map(),
-      treeDepth: 0,
-    }
-    cacheStore.set(layer, cache)
-  }
-
-  const bounds = getLayerBounds(layer)
-  const width = bounds.maxX - bounds.minX
-  const height = bounds.maxY - bounds.minY
-
-  if (width <= 0 || height <= 0) {
-    cache.baseCanvas = null
-    cache.baseCtx = null
-    cache.bounds = bounds
-    cache.basePixelsPerUnitX = 0
-    cache.basePixelsPerUnitY = 0
-    cache.baseVersion = layer?.quadtree?.version ?? 0
-    cache.areaSignature = computeAreaSignature(layer)
-    cache.boundsSignature = `${bounds.minX},${bounds.minY},${bounds.maxX},${bounds.maxY}`
-    cache.treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
-    return cache
-  }
-
-  const areaSignature = computeAreaSignature(layer)
-  const boundsSignature = `${bounds.minX},${bounds.minY},${bounds.maxX},${bounds.maxY}`
-  const quadtreeVersion = layer?.quadtree?.version ?? 0
-  const pixelsPerUnit = Math.min(
-    MAX_BASE_TEXTURE_SIZE / width,
-    MAX_BASE_TEXTURE_SIZE / height,
-  )
-  const canvasWidth = Math.max(1, Math.round(width * pixelsPerUnit))
-  const canvasHeight = Math.max(1, Math.round(height * pixelsPerUnit))
-
-  const needsCanvas = !cache.baseCanvas || cache.baseCanvas.width !== canvasWidth || cache.baseCanvas.height !== canvasHeight
-  const needsContent = needsCanvas || cache.baseVersion !== quadtreeVersion || cache.areaSignature !== areaSignature || cache.boundsSignature !== boundsSignature
-
-  if (needsCanvas) {
-    const canvas = createCanvas(canvasWidth, canvasHeight)
-    if (!canvas) {
-      cache.baseCanvas = null
-      cache.baseCtx = null
-      cache.treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
-      return cache
-    }
-    canvas.width = canvasWidth
-    canvas.height = canvasHeight
-    cache.baseCanvas = canvas
-    cache.baseCtx = canvas.getContext('2d')
-  } else if (cache.baseCanvas) {
-    if (cache.baseCanvas.width !== canvasWidth) cache.baseCanvas.width = canvasWidth
-    if (cache.baseCanvas.height !== canvasHeight) cache.baseCanvas.height = canvasHeight
-    if (cache.baseCtx && typeof cache.baseCtx.imageSmoothingEnabled === 'boolean') {
-      cache.baseCtx.imageSmoothingEnabled = false
-    }
-  }
-
-  if (needsContent && cache.baseCanvas && cache.baseCtx) {
-    cache.areaColors = buildAreaColorMap(layer)
-    renderQuadtreeToCanvas(layer, cache.baseCanvas, cache.baseCtx, bounds, cache.areaColors)
-    cache.baseVersion = quadtreeVersion
-    cache.areaSignature = areaSignature
-    cache.boundsSignature = boundsSignature
-    cache.bounds = bounds
-    cache.basePixelsPerUnitX = cache.baseCanvas.width / width
-    cache.basePixelsPerUnitY = cache.baseCanvas.height / height
-    cache.treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
-  } else if (!cache.bounds || needsCanvas) {
-    cache.bounds = bounds
-    cache.basePixelsPerUnitX = cache.baseCanvas ? cache.baseCanvas.width / width : 0
-    cache.basePixelsPerUnitY = cache.baseCanvas ? cache.baseCanvas.height / height : 0
-  }
-
-  return cache
-}
-
-function drawNodeAdaptive({
-  node,
-  bounds,
-  ctx,
-  canvas,
-  camera,
-  areaColors,
-  maxDepth = Number.POSITIVE_INFINITY,
-}) {
-  if (!node || !ctx || !canvas) return
-
-  const sx1 = camera.toScreenX(bounds.minX)
-  const sx2 = camera.toScreenX(bounds.maxX)
-  const sy1 = camera.toScreenY(bounds.minY)
-  const sy2 = camera.toScreenY(bounds.maxY)
-
-  const rawMinX = Math.min(sx1, sx2)
-  const rawMaxX = Math.max(sx1, sx2)
-  const rawMinY = Math.min(sy1, sy2)
-  const rawMaxY = Math.max(sy1, sy2)
-
-  const rawWidth = rawMaxX - rawMinX
-  const rawHeight = rawMaxY - rawMinY
-
-  if (rawWidth < SUB_PIXEL_SKIP_THRESHOLD && rawHeight < SUB_PIXEL_SKIP_THRESHOLD) {
-    return
-  }
-
-  const x = Math.floor(rawMinX)
-  const y = Math.floor(rawMinY)
-  const width = Math.ceil(rawMaxX) - x
-  const height = Math.ceil(rawMaxY) - y
-
-  if (width <= 0 || height <= 0) return
-
-  if (x >= canvas.width || y >= canvas.height || x + width <= 0 || y + height <= 0) {
-    return
-  }
-
-  const screenTooSmall = rawWidth <= MIN_DETAIL_SCREEN_SIZE && rawHeight <= MIN_DETAIL_SCREEN_SIZE
-  const shouldStop = node.isLeaf() || screenTooSmall || maxDepth <= 0
-
-  if (shouldStop) {
+function paintNodeToImage(node, minX, minY, maxX, maxY, ctx, colors, scaleX, scaleY, originX, originY) {
+  if (!node || !ctx) return
+  if (node.isLeaf?.() || !Array.isArray(node.children)) {
     if (node.value === 0) return
-    const color = areaColors.get(node.value)
+    const color = colors.get(node.value)
     if (!color || color === 'transparent') return
+    const x = (minX - originX) * scaleX
+    const y = (minY - originY) * scaleY
+    const width = (maxX - minX) * scaleX
+    const height = (maxY - minY) * scaleY
     ctx.fillStyle = color
     ctx.fillRect(x, y, width, height)
     return
   }
 
-  const midX = (bounds.minX + bounds.maxX) / 2
-  const midY = (bounds.minY + bounds.maxY) / 2
-  const childBounds = [
-    { minX: bounds.minX, minY: bounds.minY, maxX: midX, maxY: midY },
-    { minX: midX, minY: bounds.minY, maxX: bounds.maxX, maxY: midY },
-    { minX: bounds.minX, minY: midY, maxX: midX, maxY: bounds.maxY },
-    { minX: midX, minY: midY, maxX: bounds.maxX, maxY: bounds.maxY },
-  ]
+  const midX = (minX + maxX) / 2
+  const midY = (minY + maxY) / 2
 
-  for (let i = 0; i < 4; i += 1) {
-    const child = node.getChild(i)
-    if (!child) continue
-    drawNodeAdaptive({
-      node: child,
-      bounds: childBounds[i],
-      ctx,
-      canvas,
-      camera,
-      areaColors,
-      maxDepth: maxDepth - 1,
-    })
-  }
+  paintNodeToImage(node.children[0], minX, minY, midX, midY, ctx, colors, scaleX, scaleY, originX, originY)
+  paintNodeToImage(node.children[1], midX, minY, maxX, midY, ctx, colors, scaleX, scaleY, originX, originY)
+  paintNodeToImage(node.children[2], minX, midY, midX, maxY, ctx, colors, scaleX, scaleY, originX, originY)
+  paintNodeToImage(node.children[3], midX, midY, maxX, maxY, ctx, colors, scaleX, scaleY, originX, originY)
 }
 
-function drawLayerDirect(layer, ctx, canvas, camera, depth = 11) {
-  if (!layer) return
-  const areaColors = buildAreaColorMap(layer)
-  const bounds = getLayerBounds(layer)
-  const treeDepth = layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0
-  const effectiveDepth = Math.max(depth, treeDepth + 1)
+function paintNodeToScreen(node, minX, minY, maxX, maxY, ctx, camera, colors, remainingDepth, canvasWidth, canvasHeight) {
+  if (!node || !ctx || !camera) return
 
-  if (layer.visible) {
-    ctx.globalAlpha = layer.opacity ?? 1.0
+  const x1 = camera.toScreenX(minX)
+  const x2 = camera.toScreenX(maxX)
+  const y1 = camera.toScreenY(minY)
+  const y2 = camera.toScreenY(maxY)
 
-    drawNodeAdaptive({
-      node: layer.quadtree,
-      bounds,
-      ctx,
-      canvas,
-      camera,
-      areaColors,
-      maxDepth: effectiveDepth,
-    })
+  const left = Math.min(x1, x2)
+  const right = Math.max(x1, x2)
+  const top = Math.min(y1, y2)
+  const bottom = Math.max(y1, y2)
+
+  const width = right - left
+  const height = bottom - top
+
+  if (width <= 0 || height <= 0) return
+  if (right < 0 || bottom < 0 || left > canvasWidth || top > canvasHeight) return
+
+  const shouldStop = node.isLeaf?.() ||
+    !Array.isArray(node.children) ||
+    remainingDepth <= 0 ||
+    (width <= MIN_SCREEN_PIXELS && height <= MIN_SCREEN_PIXELS)
+
+  if (shouldStop) {
+    if (node.value === 0) return
+    const color = colors.get(node.value)
+    if (!color || color === 'transparent') return
+    ctx.fillStyle = color
+    ctx.fillRect(left, top, width, height)
+    return
   }
 
-  const reversedLayers = [...layer.children].reverse()
-  for (const child of reversedLayers) {
-    drawLayerDirect(child, ctx, canvas, camera, effectiveDepth)
+  const midX = (minX + maxX) / 2
+  const midY = (minY + maxY) / 2
+
+  paintNodeToScreen(node.children[0], minX, minY, midX, midY, ctx, camera, colors, remainingDepth - 1, canvasWidth, canvasHeight)
+  paintNodeToScreen(node.children[1], midX, minY, maxX, midY, ctx, camera, colors, remainingDepth - 1, canvasWidth, canvasHeight)
+  paintNodeToScreen(node.children[2], minX, midY, midX, maxY, ctx, camera, colors, remainingDepth - 1, canvasWidth, canvasHeight)
+  paintNodeToScreen(node.children[3], midX, midY, maxX, maxY, ctx, camera, colors, remainingDepth - 1, canvasWidth, canvasHeight)
+}
+
+function ensureLayerTexture(layer, store) {
+  if (!layer) return null
+  let cache = store.get(layer)
+  if (!cache) {
+    cache = {
+      canvas: null,
+      ctx: null,
+      version: -1,
+      boundsSignature: '',
+      areaSignature: '',
+      bounds: readLayerBounds(layer),
+      pixelsPerUnitX: 0,
+      pixelsPerUnitY: 0,
+      colors: new Map(),
+      depth: 0,
+    }
+    store.set(layer, cache)
+  }
+
+  const bounds = readLayerBounds(layer)
+  const width = bounds.maxX - bounds.minX
+  const height = bounds.maxY - bounds.minY
+
+  const nextAreaSignature = areaSignature(layer)
+  const nextBoundsSignature = `${bounds.minX},${bounds.minY},${bounds.maxX},${bounds.maxY}`
+  const nextVersion = layer?.quadtree?.version ?? 0
+
+  if (width <= 0 || height <= 0 || !layer?.quadtree) {
+    cache.canvas = null
+    cache.ctx = null
+    cache.pixelsPerUnitX = 0
+    cache.pixelsPerUnitY = 0
+    cache.colors = colorLookup(layer)
+    cache.depth = measureDepth(layer?.quadtree)
+    cache.version = nextVersion
+    cache.bounds = bounds
+    cache.boundsSignature = nextBoundsSignature
+    cache.areaSignature = nextAreaSignature
+    return cache
+  }
+
+  const pixelsPerUnit = Math.min(
+    MAX_TEXTURE_SIZE / Math.max(width, Number.EPSILON),
+    MAX_TEXTURE_SIZE / Math.max(height, Number.EPSILON),
+  )
+  const canvasWidth = Math.max(1, Math.round(width * pixelsPerUnit))
+  const canvasHeight = Math.max(1, Math.round(height * pixelsPerUnit))
+
+  const needsCanvas = !cache.canvas ||
+    cache.canvas.width !== canvasWidth ||
+    cache.canvas.height !== canvasHeight
+  const needsContent = needsCanvas ||
+    cache.version !== nextVersion ||
+    cache.boundsSignature !== nextBoundsSignature ||
+    cache.areaSignature !== nextAreaSignature
+
+  if (needsCanvas) {
+    const canvas = makeCanvas(canvasWidth, canvasHeight)
+    if (!canvas) {
+      cache.canvas = null
+      cache.ctx = null
+      cache.pixelsPerUnitX = 0
+      cache.pixelsPerUnitY = 0
+      cache.depth = measureDepth(layer?.quadtree)
+      return cache
+    }
+    canvas.width = canvasWidth
+    canvas.height = canvasHeight
+    cache.canvas = canvas
+    cache.ctx = canvas.getContext('2d')
+  }
+
+  if (!cache.ctx) {
+    cache.canvas = null
+    return cache
+  }
+
+  if (typeof cache.ctx.imageSmoothingEnabled === 'boolean') {
+    cache.ctx.imageSmoothingEnabled = false
+  }
+
+  if (needsContent) {
+    cache.ctx.clearRect(0, 0, cache.canvas.width, cache.canvas.height)
+    cache.colors = colorLookup(layer)
+    cache.depth = measureDepth(layer.quadtree)
+    paintNodeToImage(
+      layer.quadtree,
+      bounds.minX,
+      bounds.minY,
+      bounds.maxX,
+      bounds.maxY,
+      cache.ctx,
+      cache.colors,
+      cache.canvas.width / Math.max(width, Number.EPSILON),
+      cache.canvas.height / Math.max(height, Number.EPSILON),
+      bounds.minX,
+      bounds.minY,
+    )
+    cache.version = nextVersion
+    cache.boundsSignature = nextBoundsSignature
+    cache.areaSignature = nextAreaSignature
+    cache.bounds = bounds
+    cache.pixelsPerUnitX = cache.canvas.width / Math.max(width, Number.EPSILON)
+    cache.pixelsPerUnitY = cache.canvas.height / Math.max(height, Number.EPSILON)
+  }
+
+  return cache
+}
+
+function drawLayer(layer, ctx, canvas, camera, depthHint, store, useCache) {
+  if (!layer) return
+
+  const cache = useCache ? ensureLayerTexture(layer, store) : null
+  const bounds = cache?.bounds ?? readLayerBounds(layer)
+  const width = bounds.maxX - bounds.minX
+  const height = bounds.maxY - bounds.minY
+  const hasTree = !!layer?.quadtree
+
+  const treeDepth = cache?.depth ?? (hasTree ? measureDepth(layer.quadtree) : 0)
+  const effectiveDepth = Math.max(depthHint, treeDepth + 1)
+
+  const colors = cache?.colors ?? colorLookup(layer)
+
+  if (layer.visible && hasTree && width > 0 && height > 0) {
+    ctx.save()
+    ctx.globalAlpha = layer.opacity ?? 1
+
+    const screenX = camera.toScreenX(bounds.minX)
+    const screenY = camera.toScreenY(bounds.minY)
+    const screenWidth = width * camera.zoom
+    const screenHeight = height * camera.zoom
+
+    if (typeof ctx.imageSmoothingEnabled === 'boolean') {
+      ctx.imageSmoothingEnabled = false
+    }
+
+    let drewBase = false
+    if (useCache && cache?.canvas && cache?.ctx) {
+      ctx.drawImage(cache.canvas, screenX, screenY, screenWidth, screenHeight)
+      drewBase = true
+    }
+
+    const needDetail = !drewBase ||
+      camera.zoom > (cache?.pixelsPerUnitX ?? 0) * DETAIL_RATIO ||
+      camera.zoom > (cache?.pixelsPerUnitY ?? 0) * DETAIL_RATIO
+
+    if (needDetail) {
+      paintNodeToScreen(
+        layer.quadtree,
+        bounds.minX,
+        bounds.minY,
+        bounds.maxX,
+        bounds.maxY,
+        ctx,
+        camera,
+        colors,
+        effectiveDepth,
+        canvas.width,
+        canvas.height,
+      )
+    }
+
+    ctx.restore()
+  }
+
+  const childDepth = Math.max(depthHint, treeDepth + 1)
+  const reversedChildren = Array.isArray(layer.children) ? [...layer.children].reverse() : []
+  for (const child of reversedChildren) {
+    drawLayer(child, ctx, canvas, camera, childDepth, store, useCache)
   }
 }
 
 export function createMapRenderer() {
-  const cacheEnabled = canCreateCanvas()
-  const layerCache = new WeakMap()
-
-  function drawLayerCached(layer, ctx, canvas, camera, depth = 11) {
-    if (!layer) return
-
-    const cache = ensureLayerCache(layer, layerCache)
-    const bounds = cache?.bounds ?? getLayerBounds(layer)
-    const cachedDepth = cache?.treeDepth ?? 0
-    const treeDepth = cachedDepth || (layer?.quadtree ? computeQuadtreeDepth(layer.quadtree) : 0)
-    const effectiveDepth = Math.max(depth, treeDepth + 1)
-
-    if (!cache || !cache.baseCanvas || !cache.baseCtx) {
-      drawLayerDirect(layer, ctx, canvas, camera, effectiveDepth)
-      return
-    }
-
-    if (layer.visible) {
-      const screenX = camera.toScreenX(bounds.minX)
-      const screenY = camera.toScreenY(bounds.minY)
-      const screenWidth = (bounds.maxX - bounds.minX) * camera.zoom
-      const screenHeight = (bounds.maxY - bounds.minY) * camera.zoom
-
-      ctx.globalAlpha = layer.opacity ?? 1.0
-
-      if (typeof ctx.imageSmoothingEnabled === 'boolean') {
-        ctx.imageSmoothingEnabled = false
-      }
-      const basePixelsPerUnitX = cache.basePixelsPerUnitX || 0
-      const basePixelsPerUnitY = cache.basePixelsPerUnitY || 0
-      const needDetail = (
-        camera.zoom > basePixelsPerUnitX * DETAIL_RATIO_THRESHOLD ||
-        camera.zoom > basePixelsPerUnitY * DETAIL_RATIO_THRESHOLD
-      ) && cache.areaColors?.size
-
-      if (!needDetail) {
-        ctx.drawImage(cache.baseCanvas, screenX, screenY, screenWidth, screenHeight)
-      }
-
-      if (needDetail) {
-        drawNodeAdaptive({
-          node: layer.quadtree,
-          bounds,
-          ctx,
-          canvas,
-          camera,
-          areaColors: cache.areaColors,
-          maxDepth: effectiveDepth,
-        })
-      } else if (!needDetail && cache.baseCanvas) {
-        // Base texture already drawn above; nothing else to do.
-      }
-    }
-
-    const reversedLayers = [...layer.children].reverse()
-    for (const child of reversedLayers) {
-      drawLayerCached(child, ctx, canvas, camera, effectiveDepth)
-    }
-  }
+  const cacheSupported = supportsCanvas()
+  let cacheStore = new WeakMap()
 
   return {
     draw(map, ctx, canvas, camera, depth = 11) {
-      if (!map || !ctx || !canvas || !camera) return
-      if (!cacheEnabled) {
-        drawLayerDirect(map.layer, ctx, canvas, camera, depth)
-        return
-      }
-      drawLayerCached(map.layer, ctx, canvas, camera, depth)
+      if (!map?.layer || !ctx || !canvas || !camera) return
+      const initialDepth = Number.isFinite(depth) ? Math.max(0, depth) : 11
+      drawLayer(map.layer, ctx, canvas, camera, initialDepth, cacheStore, cacheSupported)
+    },
+    clearCache() {
+      cacheStore = new WeakMap()
     },
   }
 }

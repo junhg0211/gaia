@@ -79,12 +79,12 @@
     {/if}
     <input type="text" bind:value={layer.name} on:change={changeLayerName} />
   </div>
+  <div class="opacity-bar">
+    <input type="range" min="0" max="1" step="0.01" bind:value={layer.opacity} on:input={updateCanvas} />
+  </div>
   {#if layer.unfold}
   <div>
     <div class="add-area-inputs">
-      {#if layer.visible}
-        <button on:click={addArea}><i class="bi bi-palette2"></i></button>
-      {/if}
       {#if layer.parent}
       <button on:click={upLayer}><i class="bi bi-arrow-up"></i></button>
       <button on:click={downLayer}><i class="bi bi-arrow-down"></i></button>
@@ -92,22 +92,20 @@
       {/if}
     </div>
     {#if layer.visible}
-      <div class="opacity-bar">
-        <input type="range" min="0" max="1" step="0.01" bind:value={layer.opacity} on:input={updateCanvas} />
-      </div>
       {#each layer.areas as area}
         <Area {ws} {area} {selectedArea} on:areaselect />
       {/each}
+      <button on:click={addArea}><i class="bi bi-palette2"></i></button>
     {/if}
   </div>
   {/if}
   <div class="child-layers">
-    <div class="add-layer-inputs">
-      <button on:click={addLayer}><i class="bi bi-file-plus"></i></button>
-    </div>
     {#each layer.children as child}
       <Layer {data} {ws} {selectedArea} layer={child} on:areaselect />
     {/each}
+    <div class="add-layer-inputs">
+      <button on:click={addLayer}><i class="bi bi-file-plus"></i></button>
+    </div>
   </div>
 </div>
 
