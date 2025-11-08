@@ -1403,6 +1403,26 @@ export function createCanvasController(options) {
   let workspace = null
   let ctx = null
   let spaceKeyPressed = false
+  let logicalWidth = null
+  let logicalHeight = null
+  const getSafePixelRatio = () => (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)
+  let pixelRatio = getSafePixelRatio()
+
+  function getRenderWidth() {
+    if (typeof logicalWidth === 'number') return logicalWidth
+    if (!canvas) return 0
+    const ratio = pixelRatio || 1
+    if (!ratio) return canvas.width || 0
+    return (canvas.width || 0) / ratio
+  }
+
+  function getRenderHeight() {
+    if (typeof logicalHeight === 'number') return logicalHeight
+    if (!canvas) return 0
+    const ratio = pixelRatio || 1
+    if (!ratio) return canvas.height || 0
+    return (canvas.height || 0) / ratio
+  }
 
   const panState = {
     active: false,
@@ -1422,19 +1442,19 @@ export function createCanvasController(options) {
       this.zoom = clamp(zoom, 1 / 100, 1000000)
     },
     toScreenX(worldX) {
-      const width = canvas ? canvas.width : 0
+      const width = getRenderWidth()
       return (worldX - this.x) * this.zoom + width / 2
     },
     toScreenY(worldY) {
-      const height = canvas ? canvas.height : 0
+      const height = getRenderHeight()
       return (worldY - this.y) * this.zoom + height / 2
     },
     toWorldX(screenX) {
-      const width = canvas ? canvas.width : 0
+      const width = getRenderWidth()
       return (screenX - width / 2) / this.zoom + this.x
     },
     toWorldY(screenY) {
-      const height = canvas ? canvas.height : 0
+      const height = getRenderHeight()
       return (screenY - height / 2) / this.zoom + this.y
     },
   }
@@ -1492,18 +1512,29 @@ export function createCanvasController(options) {
     canvas.width = 0
     canvas.height = 0
     await tick()
-    canvas.width = workspace.clientWidth
-    canvas.height = workspace.clientHeight
+    const nextRatio = getSafePixelRatio()
+    pixelRatio = nextRatio
+    logicalWidth = workspace.clientWidth ?? 0
+    logicalHeight = workspace.clientHeight ?? 0
+    const scaledWidth = Math.round(logicalWidth * pixelRatio)
+    const scaledHeight = Math.round(logicalHeight * pixelRatio)
+    canvas.width = logicalWidth > 0 ? Math.max(1, scaledWidth) : 0
+    canvas.height = logicalHeight > 0 ? Math.max(1, scaledHeight) : 0
     ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    }
     updateCanvas()
   }
 
   function updateCanvas() {
     if (!ctx || !canvas) return
-
+    const width = getRenderWidth()
+    const height = getRenderHeight()
+    if (width <= 0 || height <= 0) return
     ctx.fillStyle = '#f0f0f0'
     ctx.globalAlpha = 1
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillRect(0, 0, width, height)
 
     const map = getMap?.()
     if (map) {
@@ -1532,10 +1563,10 @@ export function createCanvasController(options) {
       ctx.textBaseline = 'top'
       const startX = camera.toScreenX(0) % gridSize
       const startY = camera.toScreenY(0) % gridSize
-      for (let x = startX; x < canvas.width; x += gridSize) {
+      for (let x = startX; x < width; x += gridSize) {
         ctx.beginPath()
         ctx.moveTo(x, 0)
-        ctx.lineTo(x, canvas.height)
+        ctx.lineTo(x, height)
         ctx.stroke()
         let label = Math.round(camera.toWorldX(x))
         if (label > 0) {
@@ -1547,10 +1578,10 @@ export function createCanvasController(options) {
       }
       ctx.textAlign = 'right'
       ctx.textBaseline = 'middle'
-      for (let y = startY; y < canvas.height; y += gridSize) {
+      for (let y = startY; y < height; y += gridSize) {
         ctx.beginPath()
         ctx.moveTo(0, y)
-        ctx.lineTo(canvas.width, y)
+        ctx.lineTo(width, y)
         ctx.stroke()
         let label = Math.round(camera.toWorldY(y))
         if (label > 0) {
@@ -1558,15 +1589,15 @@ export function createCanvasController(options) {
         } else if (label < 0) {
           label = `${-label}N`
         }
-        ctx.fillText(label, canvas.width - 2, y)
+        ctx.fillText(label, width - 2, y)
       }
 
       // 카메라 줌 레벨 따라서 축척 그리기
-      const repeats = Math.ceil(300 / (unit * camera.zoom))
+      const repeats = Math.max(1, Math.ceil(300 / (unit * camera.zoom)))
 
       const scaleBarLength = unit * camera.zoom
       const padding = 10
-      const yPos = canvas.height - padding
+      const yPos = height - padding
       ctx.strokeStyle = 'white'
       ctx.lineWidth = 3
       ctx.strokeRect(padding, yPos, repeats * scaleBarLength, 5)
@@ -1605,7 +1636,7 @@ export function createCanvasController(options) {
           if (screenAreaEstimate < MIN_AREA_LABEL_SCREEN) return
           const x = camera.toScreenX(area.areaPoint[0])
           const y = camera.toScreenY(area.areaPoint[1])
-          if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) return
+          if (x < 0 || x > width || y < 0 || y > height) return
           ctx.font = '14px Pretendard'
           ctx.fillStyle = 'white'
           ctx.strokeStyle = 'white'

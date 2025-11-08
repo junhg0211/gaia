@@ -26,7 +26,7 @@ function readLayerBounds(layer) {
     return layer.getBounds()
   }
   const [px = 0, py = 0] = Array.isArray(layer?.pos) ? layer.pos : [0, 0]
-  const [sx = 0, sy = 0] = Array.isArray(layer?.size) ? layer.size : [0, 0]
+  const [sx = 1, sy = 1] = Array.isArray(layer?.size) ? layer.size : [1, 1]
   return { minX: px, minY: py, maxX: px + sx, maxY: py + sy }
 }
 
@@ -243,6 +243,13 @@ function ensureLayerTexture(layer, store) {
 function drawLayer(layer, ctx, canvas, camera, depthHint, store, useCache) {
   if (!layer) return
 
+  const canvasWidth = (typeof canvas?.clientWidth === 'number' && canvas.clientWidth > 0)
+    ? canvas.clientWidth
+    : (canvas?.width ?? 0)
+  const canvasHeight = (typeof canvas?.clientHeight === 'number' && canvas.clientHeight > 0)
+    ? canvas.clientHeight
+    : (canvas?.height ?? 0)
+
   const cache = useCache ? ensureLayerTexture(layer, store) : null
   const bounds = cache?.bounds ?? readLayerBounds(layer)
   const width = bounds.maxX - bounds.minX
@@ -288,8 +295,8 @@ function drawLayer(layer, ctx, canvas, camera, depthHint, store, useCache) {
         camera,
         colors,
         effectiveDepth,
-        canvas.width,
-        canvas.height,
+        canvasWidth,
+        canvasHeight,
       )
     }
 
